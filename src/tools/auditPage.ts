@@ -14,10 +14,23 @@ import { z } from "zod";
  *                pour color-contrast), nécessaires à fix_contrast.
  */
 
+/** Only http(s):// (public target) and file:// (local mirror) are auditable. */
+const AUDITABLE_PROTOCOLS = ["http:", "https:", "file:"] as const;
+
 export const auditPageInputSchema = {
   url: z
     .string()
     .url()
+    .refine(
+      (u) => {
+        try {
+          return (AUDITABLE_PROTOCOLS as readonly string[]).includes(new URL(u).protocol);
+        } catch {
+          return false;
+        }
+      },
+      { message: "URL must use http://, https:// or file:// scheme" },
+    )
     .describe("URL to audit. http(s):// (public target) or file:// (local mirror)."),
 };
 
@@ -35,7 +48,7 @@ export interface AuditNode {
   target: string[];
   /** Human-readable summary of why the node failed. */
   failureSummary?: string;
-  /** Per-check details (carries colors for color-contrast). */
+  /** All check results (any/all/none), carrying data such as colors for color-contrast. */
   checks: AuditCheckData[];
 }
 
@@ -74,7 +87,7 @@ export async function auditPage(input: { url: string }): Promise<AuditResult> {
         html: n.html,
         target: n.target.map((t) => String(t)),
         failureSummary: n.failureSummary,
-        checks: n.any.map((c) => ({ id: c.id, data: c.data })),
+        checks: [...n.any, ...n.all, ...n.none].map((c) => ({ id: c.id, data: c.data })),
       })),
     }));
 
