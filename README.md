@@ -118,4 +118,4 @@ The deterministic core (contrast math) is unit tested, and the full remediation 
 
 ## License
 
-MIT
+[MIT](LICENSE)
