@@ -15,8 +15,25 @@ import { getAnthropicApiKey, getAltTextModel } from "../config.js";
 const SUPPORTED_MEDIA_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type SupportedMediaType = (typeof SUPPORTED_MEDIA_TYPES)[number];
 
+const httpUrl = z
+  .string()
+  .url()
+  .refine(
+    (u) => {
+      try {
+        const p = new URL(u).protocol;
+        return p === "http:" || p === "https:";
+      } catch {
+        return false;
+      }
+    },
+    { message: "imageUrl must be an http(s):// URL (Anthropic image URLs are remote-hosted)" },
+  );
+
 export const generateAltTextInputSchema = {
-  imageUrl: z.string().url().optional().describe("Direct URL of the image to describe."),
+  imageUrl: httpUrl
+    .optional()
+    .describe("Direct http(s):// URL of the image. For local images, use selector + pageUrl."),
   pageUrl: z
     .string()
     .url()
@@ -52,13 +69,23 @@ export async function generateAltText(input: {
   if (input.selector && !input.pageUrl) {
     throw new Error("`selector` requires `pageUrl` to know which page to load.");
   }
+  if (input.imageUrl) {
+    const protocol = safeProtocol(input.imageUrl);
+    if (protocol !== "http:" && protocol !== "https:") {
+      throw new Error(
+        "imageUrl must be an http(s):// URL. For local images, use selector + pageUrl (sent as base64).",
+      );
+    }
+  }
+
+  // Resolve the image first: no point requiring an API key if the image can't
+  // even be located. This also lets a missing-selector error surface quickly.
+  const imageBlock: Anthropic.ImageBlockParam = input.imageUrl
+    ? { type: "image", source: { type: "url", url: input.imageUrl } }
+    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!);
 
   const client = new Anthropic({ apiKey: getAnthropicApiKey() });
   const model = getAltTextModel();
-
-  const imageBlock = input.imageUrl
-    ? ({ type: "image", source: { type: "url", url: input.imageUrl } } as const)
-    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!);
 
   const response = await client.messages.create({
     model,
@@ -95,8 +122,14 @@ async function fetchImageAsBase64Block(
     const page = await context.newPage();
     await page.goto(pageUrl, { waitUntil: "load" });
 
-    const el = page.locator(selector).first();
-    const src = await el.getAttribute("src");
+    const locator = page.locator(selector);
+    // Fast existence check — avoids waiting out Playwright's 30s default timeout
+    // on a selector that matches nothing.
+    if ((await locator.count()) === 0) {
+      throw new Error(`No element found for selector "${selector}" on ${pageUrl}.`);
+    }
+
+    const src = await locator.first().getAttribute("src");
     if (!src) {
       throw new Error(`Element "${selector}" has no src attribute.`);
     }
@@ -115,6 +148,14 @@ async function fetchImageAsBase64Block(
     };
   } finally {
     await browser.close();
+  }
+}
+
+function safeProtocol(url: string): string | null {
+  try {
+    return new URL(url).protocol;
+  } catch {
+    return null;
   }
 }
 
