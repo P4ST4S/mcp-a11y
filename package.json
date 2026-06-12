@@ -1,7 +1,7 @@
 {
   "name": "mcp-a11y",
   "version": "0.1.0",
-  "description": "MCP server for web accessibility remediation — the USB-C port of accessibility. Audits pages against WCAG (axe-core, deterministic) and applies fixes.",
+  "description": "MCP server for web accessibility remediation - the USB-C port of accessibility. Audits pages against WCAG (axe-core, deterministic) and applies fixes.",
   "type": "module",
   "bin": {
     "mcp-a11y": "./dist/index.js"
