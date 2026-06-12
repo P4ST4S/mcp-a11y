@@ -9,6 +9,7 @@ import { fixContrast, fixContrastInputSchema } from "./tools/fixContrast.js";
 import { simpleFixes, simpleFixesInputSchema } from "./tools/simpleFixes.js";
 import { generateAltText, generateAltTextInputSchema } from "./tools/generateAltText.js";
 import { generateReport, generateReportInputSchema } from "./tools/generateReport.js";
+import { openPr, openPrInputSchema } from "./tools/openPr.js";
 
 /**
  * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
@@ -126,6 +127,31 @@ server.registerTool(
     // looser than ReportInput, so cast through unknown.
     const html = generateReport(args as unknown as Parameters<typeof generateReport>[0]);
     return { content: [{ type: "text", text: html }] };
+  },
+);
+
+server.registerTool(
+  "open_pr",
+  {
+    title: "Open a remediation PR",
+    description:
+      "Open a mergeable PR with the remediated files. STRICT GUARDRAIL: only ever operates on the repo " +
+      "configured in A11Y_TARGET_REPO — never an arbitrary repo.",
+    inputSchema: openPrInputSchema,
+  },
+  async ({ title, body, branch, files, commitMessage, repo }) => {
+    try {
+      const result = await openPr({ title, body, branch, files, commitMessage, repo });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `open_pr failed: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
   },
 );
 

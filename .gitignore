@@ -141,3 +141,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# mcp-a11y runner artifacts
+.a11y-fixed.html
+a11y-report.html
