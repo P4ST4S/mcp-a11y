@@ -8,6 +8,7 @@ import { auditPage, auditPageInputSchema } from "./tools/auditPage.js";
 import { fixContrast, fixContrastInputSchema } from "./tools/fixContrast.js";
 import { simpleFixes, simpleFixesInputSchema } from "./tools/simpleFixes.js";
 import { generateAltText, generateAltTextInputSchema } from "./tools/generateAltText.js";
+import { generateReport, generateReportInputSchema } from "./tools/generateReport.js";
 
 /**
  * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
@@ -108,6 +109,21 @@ server.registerTool(
         isError: true,
       };
     }
+  },
+);
+
+server.registerTool(
+  "generate_report",
+  {
+    title: "Generate before/after report",
+    description:
+      "Build a self-contained before/after HTML accessibility report from an audit and applied fixes. " +
+      "No LLM. Returns the HTML string.",
+    inputSchema: generateReportInputSchema,
+  },
+  async (args) => {
+    const html = generateReport(args as Parameters<typeof generateReport>[0]);
+    return { content: [{ type: "text", text: html }] };
   },
 );
 
