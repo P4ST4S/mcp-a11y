@@ -122,7 +122,9 @@ server.registerTool(
     inputSchema: generateReportInputSchema,
   },
   async (args) => {
-    const html = generateReport(args as Parameters<typeof generateReport>[0]);
+    // The schema validates the shape; the inferred zod type is structurally
+    // looser than ReportInput, so cast through unknown.
+    const html = generateReport(args as unknown as Parameters<typeof generateReport>[0]);
     return { content: [{ type: "text", text: html }] };
   },
 );

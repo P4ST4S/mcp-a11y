@@ -12,6 +12,12 @@ export interface GeneratedAltText {
   target: string;
   altText: string;
   model: string;
+  /**
+   * Optional inline image preview as a `data:` URI. Only embedded if it is a
+   * `data:` URI — the report stays self-contained, so no remote `src` is ever
+   * emitted.
+   */
+  previewDataUri?: string;
 }
 
 export interface ReportInput {
@@ -164,9 +170,12 @@ function renderAltTexts(alts: GeneratedAltText[] | undefined): string {
   if (!alts || alts.length === 0) return "";
   const rows = alts
     .map((a) => {
-      const preview = /^https?:\/\//.test(a.target)
-        ? `<figure><img src="${escapeAttr(a.target)}" alt=""></figure>`
-        : `<code>${escapeHtml(a.target)}</code>`;
+      // Only embed a preview when it's a self-contained data: URI. Never emit a
+      // remote src — the report must stay a single openable file.
+      const preview =
+        a.previewDataUri && a.previewDataUri.startsWith("data:")
+          ? `<figure><img src="${escapeAttr(a.previewDataUri)}" alt=""></figure><code>${escapeHtml(a.target)}</code>`
+          : `<code>${escapeHtml(a.target)}</code>`;
       return `<tr><td>${preview}</td><td class="alt">${escapeHtml(a.altText)}<br><small>${escapeHtml(a.model)}</small></td></tr>`;
     })
     .join("\n");
