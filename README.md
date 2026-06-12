@@ -1,5 +1,8 @@
 # mcp-a11y
 
+[![CI](https://github.com/P4ST4S/mcp-a11y/actions/workflows/ci.yml/badge.svg)](https://github.com/P4ST4S/mcp-a11y/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 > The USB-C port of accessibility: one MCP server that audits any web page against WCAG and applies fixes, drivable from any MCP client (Claude Desktop, etc.).
 
 ## The problem
