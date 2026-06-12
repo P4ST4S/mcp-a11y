@@ -1,0 +1,4 @@
+# Classify all .ts files as TypeScript regardless of shebang.
+# src/index.ts and src/runner/demo.ts start with #!/usr/bin/env node (they are
+# executables), which can otherwise confuse GitHub Linguist's language stats.
+*.ts linguist-language=TypeScript
