@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import "dotenv/config";
 
 import { ping, pingInputSchema } from "./tools/ping.js";
+import { auditPage, auditPageInputSchema } from "./tools/auditPage.js";
 
 /**
  * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
@@ -26,6 +27,24 @@ server.registerTool(
   async ({ message }) => ({
     content: [{ type: "text", text: ping({ message }) }],
   }),
+);
+
+server.registerTool(
+  "audit_page",
+  {
+    title: "Audit page (WCAG)",
+    description:
+      "Audit a web page against WCAG rules with axe-core (Playwright headless Chromium). " +
+      "100% deterministic detection — no LLM. Returns structured violations with selectors and colors.",
+    inputSchema: auditPageInputSchema,
+  },
+  async ({ url }) => {
+    const result = await auditPage({ url });
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result as unknown as Record<string, unknown>,
+    };
+  },
 );
 
 async function main(): Promise<void> {

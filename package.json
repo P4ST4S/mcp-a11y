@@ -28,8 +28,10 @@
   "license": "MIT",
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
+    "@axe-core/playwright": "^4.11.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",
+    "playwright": "^1.60.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {

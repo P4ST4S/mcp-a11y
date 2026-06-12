@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<!--
+  INTENTIONALLY broken demo-site for mcp-a11y.
+  Structural constraints (see plan):
+    - 100% static, ZERO JavaScript  -> the rendered DOM == the source file.
+    - All colors live in the SINGLE <style> block below, simple classes,
+      no complex cascade and no external CSS -> fix_contrast knows where to reinject.
+  Injected violations:
+    - <html> with no lang attribute     (html-has-lang)
+    - no <title>                         (document-title)
+    - <img> with no alt                  (image-alt)
+    - insufficient contrasts             (color-contrast)
+    - form inputs with no <label>        (label)
+-->
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background-color: #ffffff;
+    }
+    /* Insufficient contrast: light gray on white (~2.8:1, fails AA 4.5:1) */
+    .muted {
+      color: #999999;
+      background-color: #ffffff;
+    }
+    /* Insufficient contrast: button text (~2.3:1) */
+    .cta {
+      color: #ffffff;
+      background-color: #6cb2eb;
+      border: none;
+      padding: 0.6rem 1rem;
+      font-size: 1rem;
+    }
+    /* Insufficient contrast on link (~3.3:1) */
+    .link {
+      color: #5a8fd6;
+      background-color: #ffffff;
+    }
+    .card {
+      max-width: 40rem;
+      margin: 0 auto;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1 class="muted">Acme Widgets</h1>
+
+    <p class="muted">
+      Welcome to our demo shop. This text is intentionally hard to read to
+      illustrate a contrast problem.
+    </p>
+
+    <p>
+      <a class="link" href="#">Learn more about our products</a>
+    </p>
+
+    <img src="https://picsum.photos/id/237/480/320" width="480" height="320">
+
+    <form>
+      <p>
+        <input type="text" name="email" placeholder="Your email">
+      </p>
+      <p>
+        <input type="text" name="name" placeholder="Your name">
+      </p>
+      <p>
+        <button class="cta" type="submit">Sign up</button>
+      </p>
+    </form>
+  </main>
+</body>
+</html>
