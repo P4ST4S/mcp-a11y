@@ -28,6 +28,7 @@
   "license": "MIT",
   "packageManager": "pnpm@10.20.0",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@axe-core/playwright": "^4.11.3",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dotenv": "^17.4.2",

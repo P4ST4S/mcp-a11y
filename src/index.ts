@@ -7,6 +7,7 @@ import { ping, pingInputSchema } from "./tools/ping.js";
 import { auditPage, auditPageInputSchema } from "./tools/auditPage.js";
 import { fixContrast, fixContrastInputSchema } from "./tools/fixContrast.js";
 import { simpleFixes, simpleFixesInputSchema } from "./tools/simpleFixes.js";
+import { generateAltText, generateAltTextInputSchema } from "./tools/generateAltText.js";
 
 /**
  * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
@@ -82,6 +83,31 @@ server.registerTool(
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       structuredContent: result as unknown as Record<string, unknown>,
     };
+  },
+);
+
+server.registerTool(
+  "generate_alt_text",
+  {
+    title: "Generate alt text (vision)",
+    description:
+      "Describe an image for an HTML alt attribute using a vision model. The ONLY LLM-backed tool. " +
+      "Provide either `imageUrl`, or `selector` + `pageUrl` to locate an <img> on a page.",
+    inputSchema: generateAltTextInputSchema,
+  },
+  async ({ imageUrl, pageUrl, selector }) => {
+    try {
+      const result = await generateAltText({ imageUrl, pageUrl, selector });
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+        structuredContent: result as unknown as Record<string, unknown>,
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `generate_alt_text failed: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
   },
 );
 
