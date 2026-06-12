@@ -70,9 +70,11 @@ export function simpleFixes(html: string, options: { lang?: string } = {}): {
       control.getAttribute("aria-labelledby") ||
       control.getAttribute("title");
     const id = control.getAttribute("id");
-    const hasFor = id ? root.querySelector(`label[for="${id}"]`) : null;
+    // Explicit label: <label for="id">. Implicit label: <label>…<input></label>.
+    const hasExplicitFor = id ? root.querySelector(`label[for="${cssEscape(id)}"]`) : null;
+    const hasImplicitLabel = control.closest("label") != null;
 
-    if (!hasName && !hasFor) {
+    if (!hasName && !hasExplicitFor && !hasImplicitLabel) {
       const label = humanizeName(control.getAttribute("name") ?? id ?? "field");
       control.setAttribute("aria-label", label);
       fixes.push({ rule: "label", description: `Added aria-label="${label}" to a form control` });
@@ -80,6 +82,16 @@ export function simpleFixes(html: string, options: { lang?: string } = {}): {
   }
 
   return { html: root.toString(), fixes };
+}
+
+/**
+ * Escape a string for safe use inside a double-quoted attribute selector value
+ * (`[for="…"]`). We only need to neutralize the quote and backslash so the
+ * selector parser doesn't choke on ids like `a"b`. (CSS.escape is unavailable
+ * outside a DOM runtime.)
+ */
+function cssEscape(value: string): string {
+  return value.replace(/["\\]/g, "\\$&");
 }
 
 /** "email" -> "Email", "first_name" -> "First name". */

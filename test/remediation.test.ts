@@ -28,6 +28,27 @@ test("simpleFixes adds lang, title and labels deterministically", () => {
   assert.equal(second.fixes.length, 0);
 });
 
+test("simpleFixes does not relabel controls that already have a label", () => {
+  // Implicit label (input wrapped in <label>) — must be left untouched.
+  const implicit = '<html><body><form><label>Work email <input name="email"></label></form></body></html>';
+  const r1 = simpleFixes({ html: implicit });
+  assert.ok(!r1.fixes.some((f) => f.rule === "label"), "implicit label should not trigger a fix");
+  assert.doesNotMatch(r1.html, /aria-label/);
+
+  // Explicit label via for/id — also untouched.
+  const explicit =
+    '<html><body><form><label for="e">Email</label><input id="e" name="email"></form></body></html>';
+  const r2 = simpleFixes({ html: explicit });
+  assert.ok(!r2.fixes.some((f) => f.rule === "label"));
+});
+
+test("simpleFixes handles a special-character id without throwing", () => {
+  const html = '<html><body><form><input id=\'a"b\' name="weird"></form></body></html>';
+  // Should not throw on the unescaped id and should still add a label (no matching <label for>).
+  const r = simpleFixes({ html });
+  assert.ok(r.fixes.some((f) => f.rule === "label"));
+});
+
 test("end-to-end: audit → fix → reinject → re-audit clears the violations", { timeout: 90_000 }, async () => {
   const src = readFileSync(demoPath, "utf8");
   const before = await auditPage({ url: pathToFileURL(demoPath).href });
