@@ -5,6 +5,8 @@ import "dotenv/config";
 
 import { ping, pingInputSchema } from "./tools/ping.js";
 import { auditPage, auditPageInputSchema } from "./tools/auditPage.js";
+import { fixContrast, fixContrastInputSchema } from "./tools/fixContrast.js";
+import { simpleFixes, simpleFixesInputSchema } from "./tools/simpleFixes.js";
 
 /**
  * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
@@ -40,6 +42,42 @@ server.registerTool(
   },
   async ({ url }) => {
     const result = await auditPage({ url });
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result as unknown as Record<string, unknown>,
+    };
+  },
+);
+
+server.registerTool(
+  "fix_contrast",
+  {
+    title: "Fix contrast (WCAG)",
+    description:
+      "Compute the closest WCAG-compliant foreground color for a fg/bg pair (AA 4.5:1 normal text). " +
+      "Deterministic — no LLM.",
+    inputSchema: fixContrastInputSchema,
+  },
+  async ({ fg, bg, target }) => {
+    const result = fixContrast({ fg, bg, target });
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      structuredContent: result as unknown as Record<string, unknown>,
+    };
+  },
+);
+
+server.registerTool(
+  "simple_fixes",
+  {
+    title: "Simple fixes (deterministic a11y)",
+    description:
+      "Apply deterministic structural fixes to HTML: missing lang, missing title, unlabeled form controls. " +
+      "Returns the patched HTML and the list of fixes. No LLM.",
+    inputSchema: simpleFixesInputSchema,
+  },
+  async ({ html, lang }) => {
+    const result = simpleFixes({ html, lang });
     return {
       content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       structuredContent: result as unknown as Record<string, unknown>,
