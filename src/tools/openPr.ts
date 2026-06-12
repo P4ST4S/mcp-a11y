@@ -56,9 +56,10 @@ export async function openPr(input: {
       `Refusing to open a PR on "${input.repo}". open_pr only operates on A11Y_TARGET_REPO ("${target}").`,
     );
   }
-  const [owner, repo] = target.split("/");
-  if (!owner || !repo) {
-    throw new Error(`A11Y_TARGET_REPO must be "owner/repo", got "${target}".`);
+  const segments = target.split("/");
+  const [owner, repo] = segments;
+  if (segments.length !== 2 || !owner || !repo) {
+    throw new Error(`A11Y_TARGET_REPO must be exactly "owner/repo", got "${target}".`);
   }
 
   const octokit = new Octokit({ auth: getGithubToken() });
@@ -69,7 +70,17 @@ export async function openPr(input: {
   const baseRef = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${baseBranch}` });
   const baseSha = baseRef.data.object.sha;
 
-  // 2. Create the new branch from base.
+  // 2. Create the new branch from base. Fail clearly if it already exists,
+  //    instead of letting GitHub return an opaque 422.
+  try {
+    await octokit.rest.git.getRef({ owner, repo, ref: `heads/${input.branch}` });
+    throw new Error(
+      `Branch "${input.branch}" already exists in ${target}. Use a unique branch name.`,
+    );
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status !== 404) throw err; // 404 = branch doesn't exist yet → good
+  }
   await octokit.rest.git.createRef({
     owner,
     repo,

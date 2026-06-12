@@ -121,7 +121,8 @@ async function main(): Promise<void> {
         "Automated accessibility fixes by mcp-a11y.\n\n" +
         `- Violations before: ${before.violationCount}\n` +
         `- Violations after: ${after.violationCount}\n`,
-      branch: `a11y/fix-${after.violationCount}-remaining`,
+      // Unique per run so the demo can be replayed without a branch conflict.
+      branch: getOpt("branch") ?? `a11y/fix-${Date.now()}`,
       files: [{ path: repoPath, content: patchedHtml }],
     });
     log(`  ✔ PR #${pr.number}: ${pr.url}`);

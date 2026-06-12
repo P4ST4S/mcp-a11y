@@ -37,16 +37,19 @@ test("open_pr rejects when A11Y_TARGET_REPO is unset", async () => {
 });
 
 test("open_pr rejects a malformed A11Y_TARGET_REPO", async () => {
-  process.env.A11Y_TARGET_REPO = "not-a-valid-slug";
   process.env.GITHUB_TOKEN = "ghp_dummy_for_test";
 
-  await assert.rejects(
-    () =>
-      openPr({
-        title: "x",
-        branch: "fix/a11y",
-        files: [{ path: "index.html", content: "<html></html>" }],
-      }),
-    /must be "owner\/repo"/,
-  );
+  for (const bad of ["not-a-valid-slug", "owner/repo/extra", "/repo", "owner/", "a/b/c/d"]) {
+    process.env.A11Y_TARGET_REPO = bad;
+    await assert.rejects(
+      () =>
+        openPr({
+          title: "x",
+          branch: "fix/a11y",
+          files: [{ path: "index.html", content: "<html></html>" }],
+        }),
+      /must be exactly "owner\/repo"/,
+      `"${bad}" should be rejected before any network call`,
+    );
+  }
 });
