@@ -29,13 +29,13 @@ test("simpleFixes adds lang, title and labels deterministically", () => {
 });
 
 test("simpleFixes does not relabel controls that already have a label", () => {
-  // Implicit label (input wrapped in <label>) — must be left untouched.
+  // Implicit label (input wrapped in <label>) - must be left untouched.
   const implicit = '<html><body><form><label>Work email <input name="email"></label></form></body></html>';
   const r1 = simpleFixes({ html: implicit });
   assert.ok(!r1.fixes.some((f) => f.rule === "label"), "implicit label should not trigger a fix");
   assert.doesNotMatch(r1.html, /aria-label/);
 
-  // Explicit label via for/id — also untouched.
+  // Explicit label via for/id - also untouched.
   const explicit =
     '<html><body><form><label for="e">Email</label><input id="e" name="email"></form></body></html>';
   const r2 = simpleFixes({ html: explicit });

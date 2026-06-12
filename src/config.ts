@@ -4,10 +4,10 @@ import "dotenv/config";
  * Central, lazy access to environment configuration.
  *
  * We read env vars lazily (not at import time) so the server boots even when a
- * key is absent — only the tool that needs it fails, with a clear message.
+ * key is absent - only the tool that needs it fails, with a clear message.
  */
 
-/** Default vision model for generate_alt_text — cheap & fast, enough for alt text. */
+/** Default vision model for generate_alt_text - cheap & fast, enough for alt text. */
 export const DEFAULT_ALT_TEXT_MODEL = "claude-haiku-4-5";
 /** Fallback if Haiku quality is insufficient. */
 export const FALLBACK_ALT_TEXT_MODEL = "claude-opus-4-8";

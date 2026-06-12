@@ -12,7 +12,7 @@ import { generateReport, generateReportInputSchema } from "./tools/generateRepor
 import { openPr, openPrInputSchema } from "./tools/openPr.js";
 
 /**
- * Serveur MCP mcp-a11y — « le port USB-C de l'accessibilité ».
+ * Serveur MCP mcp-a11y - « le port USB-C de l'accessibilité ».
  *
  * Transport stdio : stdout est RÉSERVÉ au protocole MCP.
  * Tout log de debug doit passer par stderr (console.error), jamais console.log.
@@ -40,7 +40,7 @@ server.registerTool(
     title: "Audit page (WCAG)",
     description:
       "Audit a web page against WCAG rules with axe-core (Playwright headless Chromium). " +
-      "100% deterministic detection — no LLM. Returns structured violations with selectors and colors.",
+      "100% deterministic detection - no LLM. Returns structured violations with selectors and colors.",
     inputSchema: auditPageInputSchema,
   },
   async ({ url }) => {
@@ -58,7 +58,7 @@ server.registerTool(
     title: "Fix contrast (WCAG)",
     description:
       "Compute the closest WCAG-compliant foreground color for a fg/bg pair (AA 4.5:1 normal text). " +
-      "Deterministic — no LLM.",
+      "Deterministic - no LLM.",
     inputSchema: fixContrastInputSchema,
   },
   async ({ fg, bg, target }) => {
@@ -136,7 +136,7 @@ server.registerTool(
     title: "Open a remediation PR",
     description:
       "Open a mergeable PR with the remediated files. STRICT GUARDRAIL: only ever operates on the repo " +
-      "configured in A11Y_TARGET_REPO — never an arbitrary repo.",
+      "configured in A11Y_TARGET_REPO - never an arbitrary repo.",
     inputSchema: openPrInputSchema,
   },
   async ({ title, body, branch, files, commitMessage, repo }) => {

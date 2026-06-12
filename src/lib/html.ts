@@ -7,7 +7,7 @@ import { fixContrast as computeContrastFix } from "./contrast.js";
  * fixes back into the SOURCE document. NO LLM here.
  *
  * Parsing uses node-html-parser with { comment: true }, which round-trips the
- * demo-site byte-for-byte — so the patched output is safe to commit.
+ * demo-site byte-for-byte - so the patched output is safe to commit.
  */
 
 export interface AppliedFix {
@@ -119,7 +119,7 @@ export interface ContrastReinjection {
 }
 
 /**
- * Reinjection glue for color-contrast — keyed by the offending ELEMENT, not by
+ * Reinjection glue for color-contrast - keyed by the offending ELEMENT, not by
  * raw color value. Swapping a color value globally is wrong when a color is
  * shared between a foreground and a background (e.g. white text vs white page);
  * instead we:
@@ -128,7 +128,7 @@ export interface ContrastReinjection {
  *      (matching by class or tag name), and
  *   3. rewrite the `color:` declaration of THAT rule only.
  *
- * Deterministic — relies on the demo-site invariant: one <style>, simple
+ * Deterministic - relies on the demo-site invariant: one <style>, simple
  * class/tag rules, no cascade ambiguity.
  */
 export function reinjectContrastFixes(

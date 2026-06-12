@@ -115,7 +115,7 @@ test("report omits the after column when no second audit is provided", () => {
 
 test("generate_report schema rejects a malformed auditBefore", () => {
   const schema = z.object(generateReportInputSchema);
-  // Missing violationCount/violations — would crash the renderer; must be rejected.
+  // Missing violationCount/violations - would crash the renderer; must be rejected.
   assert.equal(schema.safeParse({ url: "demo" }).success, false);
   assert.equal(schema.safeParse({ url: "demo", auditBefore: {} }).success, false);
   // A well-formed minimal input passes.

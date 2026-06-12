@@ -44,7 +44,7 @@ export interface AuditCheckData {
 export interface AuditNode {
   /** Outer HTML of the offending element. */
   html: string;
-  /** axe CSS selector(s) for the element — used to remap fixes onto the source. */
+  /** axe CSS selector(s) for the element - used to remap fixes onto the source. */
   target: string[];
   /** Human-readable summary of why the node failed. */
   failureSummary?: string;

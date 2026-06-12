@@ -1,5 +1,5 @@
 /**
- * Deterministic WCAG contrast math. NO LLM, NO randomness — pure functions.
+ * Deterministic WCAG contrast math. NO LLM, NO randomness - pure functions.
  *
  * References:
  *   - Relative luminance & contrast ratio: WCAG 2.1, https://www.w3.org/TR/WCAG21/#dfn-contrast-ratio
@@ -9,7 +9,7 @@
 export const AA_NORMAL = 4.5;
 
 export interface Rgb {
-  r: number; // 0–255
+  r: number; // 0-255
   g: number;
   b: number;
 }
@@ -91,7 +91,7 @@ export interface ContrastFix {
  * Find the foreground color closest to `fg` that reaches `target` contrast
  * against `bg`. Deterministic: we scale fg's channels toward black (if bg is
  * light) or toward white (if bg is dark) and binary-search the smallest shift
- * that satisfies the threshold — staying as close to the original as possible.
+ * that satisfies the threshold - staying as close to the original as possible.
  */
 export function fixContrast(fgInput: string, bgInput: string, target: number = AA_NORMAL): ContrastFix {
   const fg = parseColor(fgInput);
@@ -109,7 +109,7 @@ export function fixContrast(fgInput: string, bgInput: string, target: number = A
   }
 
   // We can push fg toward black or toward white. We try BOTH directions and,
-  // for each, binary-search the smallest shift that meets the target — staying
+  // for each, binary-search the smallest shift that meets the target - staying
   // as close to the original fg as possible. Then we keep the closer compliant
   // result (or, if neither meets the target, the one with the best ratio).
   const black: Rgb = { r: 0, g: 0, b: 0 };
@@ -193,7 +193,7 @@ function pickBest(fg: Rgb, bg: Rgb, a: Rgb, b: Rgb, target: number): Rgb {
   }
   if (aOk) return a;
   if (bOk) return b;
-  // Neither reaches the target (bg is the constraint) — best effort.
+  // Neither reaches the target (bg is the constraint) - best effort.
   return aRatio >= bRatio ? a : b;
 }
 

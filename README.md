@@ -30,7 +30,7 @@ Detection is deterministic. Structural and contrast fixes are deterministic. A v
 | `generate_report(...)` | Self-contained before/after HTML report | Yes, no LLM |
 | `open_pr(...)` | Opens a mergeable PR via Octokit. Strict guardrail: only ever touches `A11Y_TARGET_REPO` | Yes, no LLM |
 
-Each tool is pure (input to output, no shared state), so it stays drivable by any MCP client.
+Each tool's logic is isolated and testable off-MCP, with no shared state between tools. The deterministic helpers in `src/lib` are pure (no I/O); `audit_page`, `generate_alt_text`, and `open_pr` perform I/O (browser, model, GitHub) by nature.
 
 ## Stack
 

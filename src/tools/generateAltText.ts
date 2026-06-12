@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getAnthropicApiKey, getAltTextModel } from "../config.js";
 
 /**
- * `generate_alt_text` — the ONLY place an LLM is used in mcp-a11y.
+ * `generate_alt_text` - the ONLY place an LLM is used in mcp-a11y.
  *
  * Given an image (by direct URL, or by a selector on a page), ask a vision
  * model for a concise, WCAG-appropriate alt text. Everything else in this
@@ -123,7 +123,7 @@ async function fetchImageAsBase64Block(
     await page.goto(pageUrl, { waitUntil: "load" });
 
     const locator = page.locator(selector);
-    // Fast existence check — avoids waiting out Playwright's 30s default timeout
+    // Fast existence check - avoids waiting out Playwright's 30s default timeout
     // on a selector that matches nothing.
     if ((await locator.count()) === 0) {
       throw new Error(`No element found for selector "${selector}" on ${pageUrl}.`);

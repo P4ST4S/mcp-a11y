@@ -30,7 +30,7 @@ test("generateAltText rejects non-http(s) imageUrl before any LLM call", async (
 
 test("generateAltText surfaces a clear error when the API key is missing", async (t) => {
   if (process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_API_KEY.startsWith("your_")) {
-    t.skip("ANTHROPIC_API_KEY is set — skipping the missing-key path");
+    t.skip("ANTHROPIC_API_KEY is set - skipping the missing-key path");
     return;
   }
   await assert.rejects(

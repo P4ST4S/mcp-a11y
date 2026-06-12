@@ -4,10 +4,10 @@ import { z } from "zod";
 import { getGithubToken, getTargetRepo } from "../config.js";
 
 /**
- * `open_pr` — open a mergeable PR with remediated files.
+ * `open_pr` - open a mergeable PR with remediated files.
  *
  * STRICT GUARDRAIL: this tool only ever touches the repo named in
- * A11Y_TARGET_REPO. The target repo is NOT an input — it is read from config.
+ * A11Y_TARGET_REPO. The target repo is NOT an input - it is read from config.
  * If a caller passes a `repo` that disagrees with A11Y_TARGET_REPO, we refuse.
  * This is a controlled demo target by design; never a PR on an arbitrary repo.
  */
@@ -30,7 +30,7 @@ export const openPrInputSchema = {
   repo: z
     .string()
     .optional()
-    .describe("Optional safety assertion — must equal A11Y_TARGET_REPO if set."),
+    .describe("Optional safety assertion - must equal A11Y_TARGET_REPO if set."),
 };
 
 export interface OpenPrResult {
@@ -103,7 +103,7 @@ export async function openPr(input: {
         existingSha = existing.data.sha;
       }
     } catch {
-      // File doesn't exist yet — it will be created.
+      // File doesn't exist yet - it will be created.
     }
 
     await octokit.rest.repos.createOrUpdateFileContents({

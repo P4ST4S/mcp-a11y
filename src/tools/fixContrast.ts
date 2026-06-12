@@ -5,7 +5,7 @@ import { AA_NORMAL, fixContrast as computeFix, type ContrastFix } from "../lib/c
  * Pure tool `fix_contrast`: given a foreground/background pair, compute the
  * closest WCAG-compliant foreground color (AA 4.5:1 for normal text).
  *
- * Deterministic — no LLM. This tool ONLY computes the color; reinjecting it into
+ * Deterministic - no LLM. This tool ONLY computes the color; reinjecting it into
  * a source document is handled by the html reinjection glue (see lib/html.ts).
  */
 export const fixContrastInputSchema = {

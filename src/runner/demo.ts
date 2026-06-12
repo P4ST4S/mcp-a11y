@@ -12,7 +12,7 @@ import { generateReport, type GeneratedAltText } from "../lib/report.js";
 import { openPr } from "../tools/openPr.js";
 
 /**
- * Demo runner — orchestrates the full loop audit → fixes → report → (PR) by
+ * Demo runner - orchestrates the full loop audit → fixes → report → (PR) by
  * reusing the pure tool functions directly (not over MCP). Logs to stderr so
  * stdout stays clean; this is a CLI, not the MCP server.
  *
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
 
   let patchedHtml = reinjected.html;
 
-  // 4. Alt text (the ONLY LLM step) — optional.
+  // 4. Alt text (the ONLY LLM step) - optional.
   const altTexts: GeneratedAltText[] = [];
   if (doAlt) {
     log("▶ Generating alt text (vision model) …");

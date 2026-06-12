@@ -19,9 +19,9 @@ These are non-negotiable. A change that breaks one of them is wrong.
 ## Architecture
 
 - `src/index.ts` registers every tool on the `McpServer` and connects stdio. Tool registration is separate from tool logic.
-- `src/tools/*.ts` each hold one tool. The exported function is pure (input to output, no shared state) so it is testable off-MCP and reusable by the runner.
+- `src/tools/*.ts` each hold one tool. The exported function has no shared state, so it is testable off-MCP and reusable by the runner. The `src/lib` helpers are pure (no I/O); `audit_page`, `generate_alt_text`, and `open_pr` perform I/O by nature (browser, model, GitHub).
 - `src/lib/*.ts` hold deterministic helpers: `contrast.ts` (WCAG math), `html.ts` (parsing, structural fixes, contrast reinjection glue), `report.ts` (HTML report).
-- `src/runner/demo.ts` orchestrates the full loop by calling the pure tool functions directly, not over MCP.
+- `src/runner/demo.ts` orchestrates the full loop by calling the tool functions directly, not over MCP.
 - `src/config.ts` reads and validates env lazily, so the server boots without keys and only the tool that needs one fails.
 
 ## Stack and style
@@ -44,14 +44,14 @@ Library APIs move. Before coding against a dependency, confirm the real shape in
 ```bash
 pnpm dev         # run the MCP server (stdio)
 pnpm inspect     # MCP Inspector against the server
-pnpm test        # node:test via tsx (works on Node 18+, not just native strip-types)
+pnpm test        # node:test via tsx (avoids relying on native strip-types; engine stays Node 20+)
 pnpm typecheck   # tsc --noEmit on src, then on test
 pnpm build       # tsc to dist/
 ```
 
 ## Tests
 
-- `node:test` run through `tsx` (so they run on Node 18+, and so types in tests are checked).
+- `node:test` run through `tsx` (so they do not depend on native strip-types, and so types in tests are checked).
 - The deterministic core (`contrast.ts`) is unit tested. The remediation loop has an end-to-end test. Network and LLM paths are covered by input-contract tests that fail before any external call.
 - Playwright tests need Chromium (`pnpm exec playwright install chromium`).
 
