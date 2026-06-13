@@ -205,6 +205,15 @@ function escapeRegExp(s: string): string {
 }
 
 /**
+ * Encode a string for an HTML attribute value. We encode `&`, `<`, `>` here;
+ * node-html-parser already escapes `"` to `&quot;` on serialization, so we do
+ * NOT touch quotes (encoding them too would double-encode the `&` of `&quot;`).
+ */
+function encodeHtmlAttribute(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
  * Inject an `alt` attribute on `<img>` elements that lack one, via the parser
  * (so it never touches `<img>` mentioned inside HTML comments, unlike a raw
  * regex on the string). By default fills the first unlabeled image; pass a
@@ -221,7 +230,9 @@ export function injectAltText(
     if (img.rawTagName?.toLowerCase() !== "img") continue;
     const alt = img.getAttribute("alt");
     if (alt === undefined || alt.trim() === "") {
-      img.setAttribute("alt", altText);
+      // The alt text comes from the vision model (untrusted). node-html-parser
+      // escapes quotes but not & or <>, so encode for the attribute context.
+      img.setAttribute("alt", encodeHtmlAttribute(altText));
       return { html: root.toString(), injected: true };
     }
   }

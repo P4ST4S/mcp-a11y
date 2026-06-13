@@ -46,6 +46,16 @@ test("injectAltText leaves an image that already has alt alone", () => {
   assert.equal(injected, false);
 });
 
+test("injectAltText HTML-encodes the (untrusted) alt text", () => {
+  const { html } = injectAltText("<img src=x>", 'Fish & chips <b> "q" >end');
+  // & < > are encoded; the parser encodes the quote. No raw special chars leak.
+  assert.match(html, /alt="Fish &amp; chips &lt;b&gt; &quot;q&quot; &gt;end"/);
+  // No double-encoding of the quote entity.
+  assert.doesNotMatch(html, /&amp;quot;/);
+  // No raw < or > inside the attribute value.
+  assert.doesNotMatch(html, /alt="[^"]*[<>][^"]*"/);
+});
+
 test("simpleFixes does not relabel controls that already have a label", () => {
   // Implicit label (input wrapped in <label>) - must be left untouched.
   const implicit = '<html><body><form><label>Work email <input name="email"></label></form></body></html>';
