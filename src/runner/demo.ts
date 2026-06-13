@@ -66,14 +66,20 @@ async function fetchFromTargetRepo(path: string): Promise<string> {
   return Buffer.from(res.data.content, "base64").toString("utf8");
 }
 
-/** Raw GitHub URL of `path` on the default branch, used as an http asset base. */
-async function rawBaseUrl(path: string): Promise<string> {
+/**
+ * Raw GitHub bases for resolving image URLs over http:
+ *   - fileUrl: the raw URL of the HTML document (for relative src like "img/x").
+ *   - rootUrl: the repo root base ".../owner/repo/branch/" (for root-relative
+ *     src like "/img/x", which must NOT resolve against the origin).
+ */
+async function rawBases(path: string): Promise<{ fileUrl: string; rootUrl: string }> {
   const target = getTargetRepo();
   const [owner, repo] = target.split("/");
   const octokit = new Octokit({ auth: getGithubToken() });
   const info = await octokit.rest.repos.get({ owner, repo });
   const branch = info.data.default_branch;
-  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+  const rootUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/`;
+  return { fileUrl: new URL(path, rootUrl).href, rootUrl };
 }
 
 async function main(): Promise<void> {
@@ -99,8 +105,9 @@ async function main(): Promise<void> {
   let src: string;
   let auditUrl: string;
   let repoPath: string;
-  // Base URL to resolve relative image src over http (file:// fetch is unsupported).
+  // Bases to resolve image src over http (file:// fetch is unsupported).
   let assetBaseUrl: string | undefined;
+  let assetRootUrl: string | undefined;
 
   if (fromRepo) {
     log(`▶ Fetching ${fromRepo} from A11Y_TARGET_REPO …`);
@@ -110,7 +117,9 @@ async function main(): Promise<void> {
     const tmpSource = join(workDir, "source.html");
     writeFileSync(tmpSource, src, "utf8");
     auditUrl = getOpt("url") ?? pathToFileURL(tmpSource).href;
-    assetBaseUrl = await rawBaseUrl(fromRepo);
+    const bases = await rawBases(fromRepo);
+    assetBaseUrl = bases.fileUrl;
+    assetRootUrl = bases.rootUrl;
   } else {
     const htmlFile = resolve(positional ?? "demo-site/index.html");
     src = readFileSync(htmlFile, "utf8");
@@ -155,7 +164,12 @@ async function main(): Promise<void> {
       : [imgSelector];
     for (const sel of selectors) {
       try {
-        const result = await generateAltText({ pageUrl: auditUrl, selector: sel, assetBaseUrl });
+        const result = await generateAltText({
+          pageUrl: auditUrl,
+          selector: sel,
+          assetBaseUrl,
+          assetRootUrl,
+        });
         const injected = injectAltText(patchedHtml, result.altText, sel);
         if (injected.injected) {
           patchedHtml = injected.html;

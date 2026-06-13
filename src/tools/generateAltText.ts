@@ -63,11 +63,19 @@ export async function generateAltText(input: {
   pageUrl?: string;
   selector?: string;
   /**
-   * Base URL used to resolve a relative image `src` when the page is loaded
-   * from a local file (file://). Lets us audit a local copy while fetching the
-   * image over http (e.g. the raw repo URL), since file:// fetch is unsupported.
+   * Base URL used to resolve a relative image `src` (e.g. "img/x.png") when the
+   * page is loaded from a local file. Lets us audit a local copy while fetching
+   * the image over http, since file:// fetch is unsupported. Should be the http
+   * URL of the document itself (e.g. the raw URL of the HTML file).
    */
   assetBaseUrl?: string;
+  /**
+   * Base URL used to resolve a ROOT-relative image `src` (e.g. "/img/x.png").
+   * On hosts like raw.githubusercontent.com the document does not live at the
+   * origin root, so "/x" must resolve against this repo base
+   * (".../owner/repo/branch/"), not the origin. Defaults to assetBaseUrl.
+   */
+  assetRootUrl?: string;
 }): Promise<AltTextResult> {
   if (!input.imageUrl && !input.selector) {
     throw new Error("Provide either `imageUrl` or `selector` (with `pageUrl`).");
@@ -88,7 +96,10 @@ export async function generateAltText(input: {
   // even be located. This also lets a missing-selector error surface quickly.
   const imageBlock: Anthropic.ImageBlockParam = input.imageUrl
     ? { type: "image", source: { type: "url", url: input.imageUrl } }
-    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!, input.assetBaseUrl);
+    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!, {
+        baseUrl: input.assetBaseUrl,
+        rootUrl: input.assetRootUrl ?? input.assetBaseUrl,
+      });
 
   const client = new Anthropic({ apiKey: getAnthropicApiKey() });
   const model = getAltTextModel();
@@ -121,7 +132,7 @@ export async function generateAltText(input: {
 async function fetchImageAsBase64Block(
   pageUrl: string,
   selector: string,
-  assetBaseUrl?: string,
+  asset: { baseUrl?: string; rootUrl?: string } = {},
 ): Promise<Anthropic.ImageBlockParam> {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -141,10 +152,9 @@ async function fetchImageAsBase64Block(
       throw new Error(`Element "${selector}" has no src attribute.`);
     }
 
-    // Resolve relative src against assetBaseUrl (http) when given, so a locally
-    // loaded page can still fetch its images over http. Playwright's request
-    // API does not support the file:// scheme.
-    const absolute = new URL(src, assetBaseUrl ?? pageUrl).href;
+    // Resolve src over http when an asset base is given (Playwright's request
+    // API does not support file://).
+    const absolute = resolveAssetUrl(src, pageUrl, asset);
     const resp = await page.request.get(absolute);
     if (!resp.ok()) {
       throw new Error(`Failed to fetch image ${absolute}: HTTP ${resp.status()}`);
@@ -159,6 +169,34 @@ async function fetchImageAsBase64Block(
   } finally {
     await browser.close();
   }
+}
+
+/**
+ * Resolve an image `src` to an absolute http(s) URL.
+ *   - absolute src: used as-is.
+ *   - root-relative ("/x"): appended to `rootUrl` (the repo base
+ *     ".../owner/repo/branch/"). `new URL("/x", base)` cannot do this because a
+ *     leading slash resets to the origin root, dropping owner/repo/branch.
+ *   - relative ("x/y"): resolved against `baseUrl` (the document URL).
+ * Falls back to `pageUrl` when no asset bases are provided.
+ */
+export function resolveAssetUrl(
+  src: string,
+  pageUrl: string,
+  asset: { baseUrl?: string; rootUrl?: string },
+): string {
+  if (/^https?:\/\//i.test(src)) return src;
+
+  const isRootRelative = src.startsWith("/");
+  if (isRootRelative) {
+    const root = asset.rootUrl ?? asset.baseUrl;
+    if (root) {
+      // Join repo base + path without the leading slash (avoid URL origin reset).
+      return new URL(src.replace(/^\/+/, ""), root.endsWith("/") ? root : `${root}/`).href;
+    }
+    return new URL(src, pageUrl).href;
+  }
+  return new URL(src, asset.baseUrl ?? pageUrl).href;
 }
 
 function safeProtocol(url: string): string | null {

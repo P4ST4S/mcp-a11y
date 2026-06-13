@@ -4,13 +4,36 @@ import assert from "node:assert/strict";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 
-import { generateAltText } from "../src/tools/generateAltText.ts";
+import { generateAltText, resolveAssetUrl } from "../src/tools/generateAltText.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const demoUrl = pathToFileURL(join(here, "..", "demo-site", "index.html")).href;
 
 // These assert input-contract behavior that fails BEFORE any network/LLM call,
 // so they run deterministically without an API key.
+
+test("resolveAssetUrl handles relative, root-relative and absolute src", () => {
+  const asset = {
+    baseUrl: "https://raw.githubusercontent.com/owner/repo/main/demo-site/index.html",
+    rootUrl: "https://raw.githubusercontent.com/owner/repo/main/",
+  };
+  const page = "file:///tmp/source.html";
+
+  // Relative: resolved against the document URL.
+  assert.equal(
+    resolveAssetUrl("img/dog.png", page, asset),
+    "https://raw.githubusercontent.com/owner/repo/main/demo-site/img/dog.png",
+  );
+  // Root-relative: must keep owner/repo/branch (the bug was dropping them).
+  assert.equal(
+    resolveAssetUrl("/img/dog.png", page, asset),
+    "https://raw.githubusercontent.com/owner/repo/main/img/dog.png",
+  );
+  // Absolute: untouched.
+  assert.equal(resolveAssetUrl("https://cdn.example.com/x.png", page, asset), "https://cdn.example.com/x.png");
+  // No asset base: fall back to the page URL.
+  assert.equal(resolveAssetUrl("img/dog.png", page, {}), "file:///tmp/img/dog.png");
+});
 
 test("generateAltText requires imageUrl or selector", async () => {
   await assert.rejects(() => generateAltText({}), /Provide either/);
