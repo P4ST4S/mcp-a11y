@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync, mkdtempSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -102,17 +102,21 @@ test("end-to-end: audit → fix → reinject → re-audit clears the violations"
   const reinjected = reinjectContrastFixes(structural.html, requests);
   assert.ok(reinjected.applied.length > 0, "should reinject at least one color into <style>");
 
-  // 3. Write patched source and re-audit.
+  // 3. Write patched source and re-audit. Clean the temp dir afterwards.
   const dir = mkdtempSync(join(tmpdir(), "mcp-a11y-"));
-  const outPath = join(dir, "index.html");
-  writeFileSync(outPath, reinjected.html, "utf8");
+  try {
+    const outPath = join(dir, "index.html");
+    writeFileSync(outPath, reinjected.html, "utf8");
 
-  const after = await auditPage({ url: pathToFileURL(outPath).href });
-  const afterIds = new Set(after.violations.map((v) => v.id));
+    const after = await auditPage({ url: pathToFileURL(outPath).href });
+    const afterIds = new Set(after.violations.map((v) => v.id));
 
-  for (const cleared of ["html-has-lang", "document-title", "label", "color-contrast"]) {
-    assert.ok(!afterIds.has(cleared), `"${cleared}" should be cleared, still: ${[...afterIds]}`);
+    for (const cleared of ["html-has-lang", "document-title", "label", "color-contrast"]) {
+      assert.ok(!afterIds.has(cleared), `"${cleared}" should be cleared, still: ${[...afterIds]}`);
+    }
+    // image-alt is NOT handled deterministically (needs the vision model in step 4).
+    assert.ok(afterIds.has("image-alt"), "image-alt remains until generate_alt_text runs");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
-  // image-alt is NOT handled deterministically (needs the vision model in step 4).
-  assert.ok(afterIds.has("image-alt"), "image-alt remains until generate_alt_text runs");
 });

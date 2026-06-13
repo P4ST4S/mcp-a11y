@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
+import { tmpdir } from "node:os";
+
+import { Octokit } from "octokit";
 
 import { auditPage } from "../tools/auditPage.js";
 import { simpleFixes } from "../tools/simpleFixes.js";
@@ -10,22 +13,32 @@ import { generateAltText } from "../tools/generateAltText.js";
 import { reinjectContrastFixes, injectAltText, type ContrastFixRequest } from "../lib/html.js";
 import { generateReport, type GeneratedAltText } from "../lib/report.js";
 import { openPr } from "../tools/openPr.js";
+import { getGithubToken, getTargetRepo } from "../config.js";
 
 /**
  * Demo runner - orchestrates the full loop audit → fixes → report → (PR) by
  * reusing the pure tool functions directly (not over MCP). Logs to stderr so
  * stdout stays clean; this is a CLI, not the MCP server.
  *
- * Usage:
- *   tsx src/runner/demo.ts <htmlFile> [--url <auditUrl>] [--alt] [--pr] \
- *       [--repo-path demo-site/index.html] [--report out.html]
+ * Two source modes:
+ *   - Local file (default): audit and remediate a local HTML file. The PR (if
+ *     any) commits it under --repo-path.
+ *   - --from-repo <path>: fetch THAT file from A11Y_TARGET_REPO, audit and
+ *     remediate it, and re-PR the SAME path. This is the coherent loop: you
+ *     fix the exact file that lives in the target repo, with no demo gap.
  *
- *   <htmlFile>      Local HTML source to remediate (default: demo-site/index.html)
- *   --url           URL to audit (default: file:// of <htmlFile>)
- *   --alt           Also run generate_alt_text (needs ANTHROPIC_API_KEY)
- *   --pr            Open a PR on A11Y_TARGET_REPO (needs GITHUB_TOKEN). Off by default.
- *   --repo-path     Path of the file inside the target repo (for --pr)
- *   --report        Where to write the HTML report (default: a11y-report.html)
+ * Usage:
+ *   tsx src/runner/demo.ts [<htmlFile>] [--from-repo <path>] [--url <auditUrl>] \
+ *       [--alt] [--img-selector <sel>] [--pr] [--repo-path <path>] [--report out.html]
+ *
+ *   <htmlFile>       Local HTML source (default: demo-site/index.html). Ignored with --from-repo.
+ *   --from-repo      Fetch and remediate this path from A11Y_TARGET_REPO, then re-PR the same path.
+ *   --url            Override the audit URL (default: file:// of the source).
+ *   --alt            Also run generate_alt_text (needs ANTHROPIC_API_KEY).
+ *   --img-selector   CSS selector for the image to describe (default: first <img> without alt).
+ *   --pr             Open a PR on A11Y_TARGET_REPO (needs GITHUB_TOKEN). Off by default.
+ *   --repo-path      Path of the file inside the target repo (defaults to --from-repo, else demo-site/index.html).
+ *   --report         Where to write the HTML report (default: a11y-report.html).
  */
 
 function log(msg: string): void {
@@ -41,16 +54,69 @@ function getOpt(name: string): string | undefined {
   return i !== -1 ? process.argv[i + 1] : undefined;
 }
 
+/** Fetch a file's content from A11Y_TARGET_REPO (default branch). */
+async function fetchFromTargetRepo(path: string): Promise<string> {
+  const target = getTargetRepo();
+  const [owner, repo] = target.split("/");
+  const octokit = new Octokit({ auth: getGithubToken() });
+  const res = await octokit.rest.repos.getContent({ owner, repo, path });
+  if (Array.isArray(res.data) || res.data.type !== "file") {
+    throw new Error(`${path} in ${target} is not a file.`);
+  }
+  return Buffer.from(res.data.content, "base64").toString("utf8");
+}
+
+/** Raw GitHub URL of `path` on the default branch, used as an http asset base. */
+async function rawBaseUrl(path: string): Promise<string> {
+  const target = getTargetRepo();
+  const [owner, repo] = target.split("/");
+  const octokit = new Octokit({ auth: getGithubToken() });
+  const info = await octokit.rest.repos.get({ owner, repo });
+  const branch = info.data.default_branch;
+  return `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`;
+}
+
 async function main(): Promise<void> {
   const positional = process.argv.slice(2).find((a) => !a.startsWith("--"));
-  const htmlFile = resolve(positional ?? "demo-site/index.html");
-  const auditUrl = getOpt("url") ?? pathToFileURL(htmlFile).href;
+  const fromRepo = getOpt("from-repo");
   const reportPath = resolve(getOpt("report") ?? "a11y-report.html");
   const doAlt = getFlag("alt");
   const doPr = getFlag("pr");
-  const repoPath = getOpt("repo-path") ?? "demo-site/index.html";
+  const imgSelector = getOpt("img-selector") ?? "img";
 
-  const src = readFileSync(htmlFile, "utf8");
+  // Scratch directory in the OS temp location (never the project cwd). Holds the
+  // fetched source and the patched copy we audit; removed in finally.
+  const workDir = mkdtempSync(join(tmpdir(), "mcp-a11y-"));
+  try {
+    await run();
+  } finally {
+    rmSync(workDir, { recursive: true, force: true });
+  }
+
+  async function run(): Promise<void> {
+  // Resolve the source: either a file in the target repo (coherent loop) or a
+  // local file. The PR commits to the same path we sourced from.
+  let src: string;
+  let auditUrl: string;
+  let repoPath: string;
+  // Base URL to resolve relative image src over http (file:// fetch is unsupported).
+  let assetBaseUrl: string | undefined;
+
+  if (fromRepo) {
+    log(`▶ Fetching ${fromRepo} from A11Y_TARGET_REPO …`);
+    src = await fetchFromTargetRepo(fromRepo);
+    repoPath = getOpt("repo-path") ?? fromRepo;
+    // Write to a temp file so axe can audit the rendered DOM via file://.
+    const tmpSource = join(workDir, "source.html");
+    writeFileSync(tmpSource, src, "utf8");
+    auditUrl = getOpt("url") ?? pathToFileURL(tmpSource).href;
+    assetBaseUrl = await rawBaseUrl(fromRepo);
+  } else {
+    const htmlFile = resolve(positional ?? "demo-site/index.html");
+    src = readFileSync(htmlFile, "utf8");
+    repoPath = getOpt("repo-path") ?? "demo-site/index.html";
+    auditUrl = getOpt("url") ?? pathToFileURL(htmlFile).href;
+  }
 
   // 1. Audit (deterministic).
   log(`▶ Auditing ${auditUrl} …`);
@@ -78,24 +144,32 @@ async function main(): Promise<void> {
 
   let patchedHtml = reinjected.html;
 
-  // 4. Alt text (the ONLY LLM step) - optional.
+  // 4. Alt text (the ONLY LLM step) - optional. One call per image flagged by
+  // axe, each addressed by its own selector so multiple images are all fixed.
   const altTexts: GeneratedAltText[] = [];
   if (doAlt) {
     log("▶ Generating alt text (vision model) …");
-    try {
-      const result = await generateAltText({ pageUrl: auditUrl, selector: "img" });
-      altTexts.push({ target: "img", altText: result.altText, model: result.model });
-      // Inject the alt via the parser (ignores <img> mentioned in comments).
-      const injected = injectAltText(patchedHtml, result.altText, "img");
-      patchedHtml = injected.html;
-      log(`  • img: "${result.altText}" (${result.model})`);
-    } catch (err) {
-      log(`  ! alt text skipped: ${(err as Error).message}`);
+    const imageAlt = before.violations.find((v) => v.id === "image-alt");
+    const selectors = imageAlt
+      ? imageAlt.nodes.map((n) => n.target[n.target.length - 1]).filter(Boolean)
+      : [imgSelector];
+    for (const sel of selectors) {
+      try {
+        const result = await generateAltText({ pageUrl: auditUrl, selector: sel, assetBaseUrl });
+        const injected = injectAltText(patchedHtml, result.altText, sel);
+        if (injected.injected) {
+          patchedHtml = injected.html;
+          altTexts.push({ target: sel, altText: result.altText, model: result.model });
+          log(`  • ${sel}: "${result.altText}" (${result.model})`);
+        }
+      } catch (err) {
+        log(`  ! alt text skipped for ${sel}: ${(err as Error).message}`);
+      }
     }
   }
 
-  // 5. Re-audit the patched output.
-  const tmpOut = resolve(".a11y-fixed.html");
+  // 5. Re-audit the patched output (written to the scratch dir, not the cwd).
+  const tmpOut = join(workDir, "patched.html");
   writeFileSync(tmpOut, patchedHtml, "utf8");
   log("▶ Re-auditing patched output …");
   const after = await auditPage({ url: pathToFileURL(tmpOut).href });
@@ -132,6 +206,7 @@ async function main(): Promise<void> {
   }
 
   log("✓ Done.");
+  }
 }
 
 main().catch((err) => {

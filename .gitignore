@@ -142,6 +142,6 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
-# mcp-a11y runner artifacts
-.a11y-fixed.html
+# mcp-a11y runner artifacts (scratch files now live in the OS temp dir;
+# only the default report is written to the cwd)
 a11y-report.html

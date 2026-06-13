@@ -62,6 +62,12 @@ export async function generateAltText(input: {
   imageUrl?: string;
   pageUrl?: string;
   selector?: string;
+  /**
+   * Base URL used to resolve a relative image `src` when the page is loaded
+   * from a local file (file://). Lets us audit a local copy while fetching the
+   * image over http (e.g. the raw repo URL), since file:// fetch is unsupported.
+   */
+  assetBaseUrl?: string;
 }): Promise<AltTextResult> {
   if (!input.imageUrl && !input.selector) {
     throw new Error("Provide either `imageUrl` or `selector` (with `pageUrl`).");
@@ -82,7 +88,7 @@ export async function generateAltText(input: {
   // even be located. This also lets a missing-selector error surface quickly.
   const imageBlock: Anthropic.ImageBlockParam = input.imageUrl
     ? { type: "image", source: { type: "url", url: input.imageUrl } }
-    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!);
+    : await fetchImageAsBase64Block(input.pageUrl!, input.selector!, input.assetBaseUrl);
 
   const client = new Anthropic({ apiKey: getAnthropicApiKey() });
   const model = getAltTextModel();
@@ -115,6 +121,7 @@ export async function generateAltText(input: {
 async function fetchImageAsBase64Block(
   pageUrl: string,
   selector: string,
+  assetBaseUrl?: string,
 ): Promise<Anthropic.ImageBlockParam> {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -134,7 +141,10 @@ async function fetchImageAsBase64Block(
       throw new Error(`Element "${selector}" has no src attribute.`);
     }
 
-    const absolute = new URL(src, pageUrl).href;
+    // Resolve relative src against assetBaseUrl (http) when given, so a locally
+    // loaded page can still fetch its images over http. Playwright's request
+    // API does not support the file:// scheme.
+    const absolute = new URL(src, assetBaseUrl ?? pageUrl).href;
     const resp = await page.request.get(absolute);
     if (!resp.ok()) {
       throw new Error(`Failed to fetch image ${absolute}: HTTP ${resp.status()}`);
