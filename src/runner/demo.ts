@@ -7,7 +7,7 @@ import { resolve } from "node:path";
 import { auditPage } from "../tools/auditPage.js";
 import { simpleFixes } from "../tools/simpleFixes.js";
 import { generateAltText } from "../tools/generateAltText.js";
-import { reinjectContrastFixes, type ContrastFixRequest } from "../lib/html.js";
+import { reinjectContrastFixes, injectAltText, type ContrastFixRequest } from "../lib/html.js";
 import { generateReport, type GeneratedAltText } from "../lib/report.js";
 import { openPr } from "../tools/openPr.js";
 
@@ -85,8 +85,9 @@ async function main(): Promise<void> {
     try {
       const result = await generateAltText({ pageUrl: auditUrl, selector: "img" });
       altTexts.push({ target: "img", altText: result.altText, model: result.model });
-      // Inject the alt attribute into the first <img> lacking one.
-      patchedHtml = patchedHtml.replace(/<img(?![^>]*\salt=)/i, `<img alt="${escapeAttr(result.altText)}"`);
+      // Inject the alt via the parser (ignores <img> mentioned in comments).
+      const injected = injectAltText(patchedHtml, result.altText, "img");
+      patchedHtml = injected.html;
       log(`  • img: "${result.altText}" (${result.model})`);
     } catch (err) {
       log(`  ! alt text skipped: ${(err as Error).message}`);
@@ -131,10 +132,6 @@ async function main(): Promise<void> {
   }
 
   log("✓ Done.");
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
 main().catch((err) => {

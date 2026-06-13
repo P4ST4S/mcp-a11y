@@ -203,3 +203,27 @@ function selectorListMatches(selectors: string, ruleKey: string): boolean {
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+
+/**
+ * Inject an `alt` attribute on `<img>` elements that lack one, via the parser
+ * (so it never touches `<img>` mentioned inside HTML comments, unlike a raw
+ * regex on the string). By default fills the first unlabeled image; pass a
+ * selector to target a specific one.
+ */
+export function injectAltText(
+  html: string,
+  altText: string,
+  selector = "img",
+): { html: string; injected: boolean } {
+  const root = parseDoc(html);
+  const candidates = root.querySelectorAll(selector);
+  for (const img of candidates) {
+    if (img.rawTagName?.toLowerCase() !== "img") continue;
+    const alt = img.getAttribute("alt");
+    if (alt === undefined || alt.trim() === "") {
+      img.setAttribute("alt", altText);
+      return { html: root.toString(), injected: true };
+    }
+  }
+  return { html, injected: false };
+}

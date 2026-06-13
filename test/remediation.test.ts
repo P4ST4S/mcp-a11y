@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 
 import { auditPage } from "../src/tools/auditPage.ts";
 import { simpleFixes } from "../src/tools/simpleFixes.ts";
-import { reinjectContrastFixes, type ContrastFixRequest } from "../src/lib/html.ts";
+import { reinjectContrastFixes, injectAltText, type ContrastFixRequest } from "../src/lib/html.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const demoPath = join(here, "..", "demo-site", "index.html");
@@ -26,6 +26,24 @@ test("simpleFixes adds lang, title and labels deterministically", () => {
   // Idempotent: re-running finds nothing left to fix.
   const second = simpleFixes({ html });
   assert.equal(second.fixes.length, 0);
+});
+
+test("injectAltText targets the real <img>, not one mentioned in a comment", () => {
+  // Regression: a regex on the raw string matched the <img> inside the comment
+  // first, corrupting the comment and leaving the real image without alt.
+  const html =
+    '<html><body><!-- <img> with no alt --><img src="dog.png"></body></html>';
+  const { html: out, injected } = injectAltText(html, "A black dog");
+  assert.ok(injected);
+  assert.match(out, /<img src="dog\.png" alt="A black dog">/);
+  // The comment is untouched.
+  assert.match(out, /<!-- <img> with no alt -->/);
+});
+
+test("injectAltText leaves an image that already has alt alone", () => {
+  const html = '<html><body><img src="x.png" alt="already"></body></html>';
+  const { injected } = injectAltText(html, "new");
+  assert.equal(injected, false);
 });
 
 test("simpleFixes does not relabel controls that already have a label", () => {
