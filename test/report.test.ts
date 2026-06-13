@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { z } from "zod";
 
-import { generateReport, type ReportInput } from "../src/lib/report.ts";
+import { generateReport, buildPrBody, type ReportInput } from "../src/lib/report.ts";
 import { generateReportInputSchema } from "../src/tools/generateReport.ts";
 import type { AuditResult } from "../src/tools/auditPage.ts";
 
@@ -123,4 +123,36 @@ test("generate_report schema rejects a malformed auditBefore", () => {
     schema.safeParse({ url: "demo", auditBefore: { violationCount: 0, violations: [] } }).success,
     true,
   );
+});
+
+test("buildPrBody renders the summary table, fixes, ratios and visual warning", () => {
+  const body = buildPrBody({
+    auditedUrl: "https://example.com/index.html",
+    before: 5,
+    after: 0,
+    simpleFixes: [{ rule: "html-has-lang", description: 'Added lang="en" to <html>' }],
+    contrastFixes: [
+      {
+        selector: "button",
+        rule: ".cta",
+        fromColor: "#6cb2eb",
+        toColor: "#4b7ba3",
+        property: "background-color",
+        ratioBefore: 2.28,
+        ratioAfter: 4.51,
+        visualChange: true,
+      },
+    ],
+    altTexts: [{ target: ".hero", altText: "A sun in a green sky", model: "claude-haiku-4-5" }],
+  });
+
+  assert.match(body, /Automated accessibility remediation/);
+  assert.match(body, /\| Total \| \*\*5\*\* \| \*\*0\*\* \|/);
+  assert.match(body, /2\.28:1 → 4\.51:1/);
+  assert.match(body, /axe rule: `html-has-lang`/);
+  assert.match(body, /`\.hero` → "A sun in a green sky"/);
+  assert.match(body, /Visual change to review:/);
+  assert.match(body, /<details>/);
+  // No long dashes anywhere.
+  assert.doesNotMatch(body, /[–—]/);
 });

@@ -207,3 +207,101 @@ function escapeHtml(s: string): string {
 function escapeAttr(s: string): string {
   return escapeHtml(s);
 }
+
+export interface PrBodyInput {
+  auditedUrl: string;
+  before: number;
+  after: number;
+  simpleFixes?: AppliedFix[];
+  contrastFixes?: ContrastReinjection[];
+  altTexts?: GeneratedAltText[];
+}
+
+/**
+ * Build a rich Markdown body for the remediation PR. Pure, no I/O. Mirrors the
+ * report: a summary table, per-category changes with WCAG references and
+ * contrast ratios, a visual-change warning when a visible color shifted, and a
+ * collapsible note on how the fixes were produced.
+ */
+export function buildPrBody(input: PrBodyInput): string {
+  const lines: string[] = [];
+  lines.push("## ♿ Automated accessibility remediation");
+  lines.push("");
+  lines.push(
+    `\`mcp-a11y\` audited **${input.auditedUrl}** against WCAG 2.1 AA and applied`,
+  );
+  lines.push(
+    "deterministic fixes. Detection runs on axe-core; only alt text uses a vision model.",
+  );
+  lines.push("");
+  lines.push("| WCAG violations | Before | After |");
+  lines.push("|---|:--:|:--:|");
+  lines.push(`| Total | **${input.before}** | **${input.after}** |`);
+  lines.push("");
+  lines.push("### What changed");
+  lines.push("");
+
+  const contrast = input.contrastFixes ?? [];
+  if (contrast.length > 0) {
+    lines.push("**Contrast - WCAG 1.4.3** · closest compliant color, minimal visual change");
+    for (const c of contrast) {
+      lines.push(
+        `- \`${c.selector}\` \`${c.fromColor}\` → \`${c.toColor}\`  (${c.ratioBefore}:1 → ${c.ratioAfter}:1)`,
+      );
+    }
+    lines.push("");
+  }
+
+  const structural = input.simpleFixes ?? [];
+  if (structural.length > 0) {
+    lines.push("**Structure**");
+    for (const f of structural) {
+      lines.push(`- ${f.description}  (axe rule: \`${f.rule}\`)`);
+    }
+    lines.push("");
+  }
+
+  const alts = input.altTexts ?? [];
+  if (alts.length > 0) {
+    lines.push("**Alt text** · vision-generated");
+    for (const a of alts) {
+      lines.push(`- \`${a.target}\` → "${a.altText}"`);
+    }
+    lines.push("");
+  }
+
+  for (const c of contrast.filter((f) => f.visualChange)) {
+    lines.push(
+      `> ⚠️ **Visual change to review:** \`${c.selector}\` ${c.property} shifted from`,
+    );
+    lines.push(
+      `> \`${c.fromColor}\` to \`${c.toColor}\` - verify it still matches your design intent.`,
+    );
+    lines.push("");
+  }
+
+  lines.push("<details>");
+  lines.push("<summary>How these fixes were produced</summary>");
+  lines.push("");
+  lines.push(
+    "Everything except alt text is **deterministic and reproducible**: axe-core",
+  );
+  lines.push(
+    "decides what is broken, and contrast/structure fixes are computed, not guessed.",
+  );
+  lines.push(
+    "Fixes are reinjected into the source **by CSS selector** (not by raw color",
+  );
+  lines.push("value), so the patched file is exactly what gets committed.");
+  lines.push("</details>");
+  lines.push("");
+  lines.push("---");
+  lines.push(
+    '<sub>Opened by <a href="https://github.com/P4ST4S/mcp-a11y">mcp-a11y</a> -',
+  );
+  lines.push(
+    "the USB-C port of accessibility. These are automated changes; review before merging.</sub>",
+  );
+
+  return lines.join("\n");
+}

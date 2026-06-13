@@ -1,6 +1,11 @@
 import { parse, HTMLElement } from "node-html-parser";
 
-import { fixContrast as computeContrastFix } from "./contrast.js";
+import {
+  fixContrast as computeContrastFix,
+  fixContrastByBackground,
+  parseColor,
+  relativeLuminance,
+} from "./contrast.js";
 
 /**
  * Deterministic HTML remediation + the "reinjection glue" that puts computed
@@ -49,12 +54,17 @@ export function simpleFixes(html: string, options: { lang?: string } = {}): {
   const head = root.querySelector("head");
   const existingTitle = root.querySelector("title");
   if (head && (!existingTitle || existingTitle.text.trim() === "")) {
+    // Derive a meaningful title from the first non-empty <h1>, rather than a
+    // generic placeholder. Fall back only if there is no usable heading.
+    const h1 = root.querySelector("h1");
+    const title = h1?.text.trim() || "Untitled page";
+    const titleHtml = encodeHtmlText(title);
     if (existingTitle) {
-      existingTitle.set_content("Untitled page");
-      fixes.push({ rule: "document-title", description: "Filled empty <title>" });
+      existingTitle.set_content(titleHtml);
+      fixes.push({ rule: "document-title", description: `Filled <title> with "${title}"` });
     } else {
-      head.insertAdjacentHTML("afterbegin", "\n    <title>Untitled page</title>");
-      fixes.push({ rule: "document-title", description: "Added a <title> to <head>" });
+      head.insertAdjacentHTML("afterbegin", `\n    <title>${titleHtml}</title>`);
+      fixes.push({ rule: "document-title", description: `Added <title>"${title}"</title> to <head>` });
     }
   }
 
@@ -114,8 +124,15 @@ export interface ContrastReinjection {
   selector: string;
   fromColor: string;
   toColor: string;
-  /** The CSS rule (class or element) whose `color` was updated. */
+  /** The CSS rule (class or element) whose color was updated. */
   rule: string;
+  /** Which property was changed: text "color" or "background-color". */
+  property: "color" | "background-color";
+  /** Contrast ratio before and after the fix (for the PR/report). */
+  ratioBefore: number;
+  ratioAfter: number;
+  /** True when the visible text/surface color changed in a way worth reviewing. */
+  visualChange: boolean;
 }
 
 /**
@@ -146,9 +163,6 @@ export function reinjectContrastFixes(
   let css = styleEl.text;
 
   for (const req of requests) {
-    const fix = computeContrastFix(req.fg, req.bg);
-    if (fix.alreadyCompliant) continue;
-
     const selector = req.target[req.target.length - 1] ?? "";
     const el = selector ? root.querySelector(selector) : null;
     if (!el) continue;
@@ -157,19 +171,63 @@ export function reinjectContrastFixes(
     const classNames = (el.getAttribute("class") ?? "").split(/\s+/).filter(Boolean);
     const ruleKeys = [...classNames.map((c) => `.${c}`), el.rawTagName ?? ""].filter(Boolean);
 
+    // Preserve visual identity: adjust the BACKGROUND (keeping the text color)
+    // only when the element's rule sets a NON-NEUTRAL background of its own -
+    // i.e. a colored surface like a button. A white/near-white background is
+    // just the page surface, so there we recolor the TEXT instead (adjusting
+    // such a background to near-black would look far worse).
+    const ownsBackground =
+      ruleKeys.some((k) => ruleHasBackground(css, k)) && isColoredSurface(req.bg);
+
+    let done = false;
     for (const key of ruleKeys) {
-      const updated = replaceColorInRule(css, key, fix.compliantFg);
-      if (updated !== css) {
-        css = updated;
-        applied.push({
-          selector,
-          fromColor: req.fg,
-          toColor: fix.compliantFg,
-          rule: key,
-        });
-        break; // one rule updated per failing element
+      if (ownsBackground) {
+        const fix = fixContrastByBackground(req.fg, req.bg);
+        if (fix.alreadyCompliant) {
+          done = true;
+          break;
+        }
+        const updated = replaceDeclInRule(css, key, "background-color", fix.compliantBg);
+        if (updated !== css) {
+          css = updated;
+          applied.push({
+            selector,
+            fromColor: req.bg,
+            toColor: fix.compliantBg,
+            rule: key,
+            property: "background-color",
+            ratioBefore: fix.originalRatio,
+            ratioAfter: fix.newRatio,
+            visualChange: isPerceptibleChange(req.bg, fix.compliantBg),
+          });
+          done = true;
+          break;
+        }
+      } else {
+        const fix = computeContrastFix(req.fg, req.bg);
+        if (fix.alreadyCompliant) {
+          done = true;
+          break;
+        }
+        const updated = replaceDeclInRule(css, key, "color", fix.compliantFg);
+        if (updated !== css) {
+          css = updated;
+          applied.push({
+            selector,
+            fromColor: req.fg,
+            toColor: fix.compliantFg,
+            rule: key,
+            property: "color",
+            ratioBefore: fix.originalRatio,
+            ratioAfter: fix.newRatio,
+            visualChange: isPerceptibleChange(req.fg, fix.compliantFg),
+          });
+          done = true;
+          break;
+        }
       }
     }
+    void done;
   }
 
   styleEl.set_content(css);
@@ -177,19 +235,69 @@ export function reinjectContrastFixes(
 }
 
 /**
- * Replace the `color:` declaration inside the rule whose selector list contains
- * `ruleKey` (a `.class` or a `tag`). Returns css unchanged if not found.
+ * Whether two colors differ enough to be worth flagging for visual review.
+ * Euclidean RGB distance; a tiny nudge like #777777 -> #767676 (distance ~1)
+ * is imperceptible and should not raise a warning, while a button surface
+ * shift is. Threshold chosen empirically.
  */
-function replaceColorInRule(css: string, ruleKey: string, toColor: string): string {
-  // Match: <selectors containing ruleKey> { ... }
-  const ruleRe = new RegExp(
-    `([^{}]*${escapeRegExp(ruleKey)}[^{}]*)\\{([^}]*)\\}`,
-    "g",
-  );
+function isPerceptibleChange(from: string, to: string): boolean {
+  try {
+    const a = parseColor(from);
+    const b = parseColor(to);
+    const dist = Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
+    return dist >= 24;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * A "colored surface" is a background that carries visual identity (a button,
+ * a badge), not just the page. Heuristic: clearly not white/near-white. We use
+ * relative luminance so light pastels still count as surfaces but plain white
+ * (and near-white page backgrounds) do not.
+ */
+function isColoredSurface(bg: string): boolean {
+  try {
+    return relativeLuminance(parseColor(bg)) < 0.8;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether the rule for `ruleKey` declares its own background-color. */
+function ruleHasBackground(css: string, ruleKey: string): boolean {
+  const ruleRe = new RegExp(`([^{}]*${escapeRegExp(ruleKey)}[^{}]*)\\{([^}]*)\\}`, "g");
+  let m: RegExpExecArray | null;
+  while ((m = ruleRe.exec(css)) !== null) {
+    if (selectorListMatches(m[1], ruleKey) && /background(-color)?\s*:/.test(m[2])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Replace a `prop:` declaration inside the rule whose selector list contains
+ * `ruleKey` (a `.class` or a `tag`). Returns css unchanged if not found. The
+ * `color` property is matched with a separator guard so it never hits
+ * `background-color`.
+ */
+function replaceDeclInRule(
+  css: string,
+  ruleKey: string,
+  prop: "color" | "background-color",
+  toColor: string,
+): string {
+  const ruleRe = new RegExp(`([^{}]*${escapeRegExp(ruleKey)}[^{}]*)\\{([^}]*)\\}`, "g");
+  const declRe =
+    prop === "color"
+      ? /(^|[;{\s])color\s*:\s*[^;}]+/
+      : /(^|[;{\s])background-color\s*:\s*[^;}]+/;
   return css.replace(ruleRe, (whole, selectors: string, body: string) => {
     if (!selectorListMatches(selectors, ruleKey)) return whole;
-    if (!/(^|[;{\s])color\s*:/.test(body)) return whole;
-    const newBody = body.replace(/(^|[;{\s])color\s*:\s*[^;}]+/, `$1color: ${toColor}`);
+    if (!declRe.test(body)) return whole;
+    const newBody = body.replace(declRe, `$1${prop}: ${toColor}`);
     return `${selectors}{${newBody}}`;
   });
 }
@@ -211,6 +319,17 @@ function escapeRegExp(s: string): string {
  */
 function encodeHtmlAttribute(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Encode text node content (e.g. inside <title>). Same set as attribute here. */
+function encodeHtmlText(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/** Return the `src` of the first element matching `selector`, or undefined. */
+export function getImageSrc(html: string, selector: string): string | undefined {
+  const el = parseDoc(html).querySelector(selector);
+  return el?.getAttribute("src");
 }
 
 /**

@@ -10,8 +10,8 @@ import { Octokit } from "octokit";
 import { auditPage } from "../tools/auditPage.js";
 import { simpleFixes } from "../tools/simpleFixes.js";
 import { generateAltText } from "../tools/generateAltText.js";
-import { reinjectContrastFixes, injectAltText, type ContrastFixRequest } from "../lib/html.js";
-import { generateReport, type GeneratedAltText } from "../lib/report.js";
+import { reinjectContrastFixes, injectAltText, getImageSrc, type ContrastFixRequest } from "../lib/html.js";
+import { generateReport, buildPrBody, type GeneratedAltText } from "../lib/report.js";
 import { openPr } from "../tools/openPr.js";
 import { getGithubToken, getTargetRepo } from "../config.js";
 
@@ -105,6 +105,8 @@ async function main(): Promise<void> {
   let src: string;
   let auditUrl: string;
   let repoPath: string;
+  // Human-readable label for the audited file (the temp file:// path is noise).
+  let displayUrl: string;
   // Bases to resolve image src over http (file:// fetch is unsupported).
   let assetBaseUrl: string | undefined;
   let assetRootUrl: string | undefined;
@@ -120,11 +122,13 @@ async function main(): Promise<void> {
     const bases = await rawBases(fromRepo);
     assetBaseUrl = bases.fileUrl;
     assetRootUrl = bases.rootUrl;
+    displayUrl = `${getTargetRepo()}/${fromRepo}`;
   } else {
     const htmlFile = resolve(positional ?? "demo-site/index.html");
     src = readFileSync(htmlFile, "utf8");
     repoPath = getOpt("repo-path") ?? "demo-site/index.html";
     auditUrl = getOpt("url") ?? pathToFileURL(htmlFile).href;
+    displayUrl = auditUrl;
   }
 
   // 1. Audit (deterministic).
@@ -155,6 +159,8 @@ async function main(): Promise<void> {
 
   // 4. Alt text (the ONLY LLM step) - optional. One call per image flagged by
   // axe, each addressed by its own selector so multiple images are all fixed.
+  // We cache by image URL so the same image is described once, even if it
+  // appears under several selectors (one model call, consistent text).
   const altTexts: GeneratedAltText[] = [];
   if (doAlt) {
     log("▶ Generating alt text (vision model) …");
@@ -162,19 +168,31 @@ async function main(): Promise<void> {
     const selectors = imageAlt
       ? imageAlt.nodes.map((n) => n.target[n.target.length - 1]).filter(Boolean)
       : [imgSelector];
+    const altByImageUrl = new Map<string, string>();
     for (const sel of selectors) {
       try {
-        const result = await generateAltText({
-          pageUrl: auditUrl,
-          selector: sel,
-          assetBaseUrl,
-          assetRootUrl,
-        });
-        const injected = injectAltText(patchedHtml, result.altText, sel);
+        const srcKey = getImageSrc(patchedHtml, sel);
+        let altText: string;
+        let model = "(cached)";
+        const cached = srcKey ? altByImageUrl.get(srcKey) : undefined;
+        if (cached) {
+          altText = cached;
+        } else {
+          const result = await generateAltText({
+            pageUrl: auditUrl,
+            selector: sel,
+            assetBaseUrl,
+            assetRootUrl,
+          });
+          altText = result.altText;
+          model = result.model;
+          if (srcKey) altByImageUrl.set(srcKey, altText);
+        }
+        const injected = injectAltText(patchedHtml, altText, sel);
         if (injected.injected) {
           patchedHtml = injected.html;
-          altTexts.push({ target: sel, altText: result.altText, model: result.model });
-          log(`  • ${sel}: "${result.altText}" (${result.model})`);
+          altTexts.push({ target: sel, altText, model });
+          log(`  • ${sel}: "${altText}" (${model})`);
         }
       } catch (err) {
         log(`  ! alt text skipped for ${sel}: ${(err as Error).message}`);
@@ -206,10 +224,14 @@ async function main(): Promise<void> {
     log("▶ Opening PR on A11Y_TARGET_REPO …");
     const pr = await openPr({
       title: "a11y: automated WCAG remediation",
-      body:
-        "Automated accessibility fixes by mcp-a11y.\n\n" +
-        `- Violations before: ${before.violationCount}\n` +
-        `- Violations after: ${after.violationCount}\n`,
+      body: buildPrBody({
+        auditedUrl: displayUrl,
+        before: before.violationCount,
+        after: after.violationCount,
+        simpleFixes: structural.fixes,
+        contrastFixes: reinjected.applied,
+        altTexts,
+      }),
       // Unique per run so the demo can be replayed without a branch conflict.
       branch: getOpt("branch") ?? `a11y/fix-${Date.now()}`,
       files: [{ path: repoPath, content: patchedHtml }],

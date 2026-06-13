@@ -88,39 +88,20 @@ export interface ContrastFix {
 }
 
 /**
- * Find the foreground color closest to `fg` that reaches `target` contrast
- * against `bg`. Deterministic: we scale fg's channels toward black (if bg is
- * light) or toward white (if bg is dark) and binary-search the smallest shift
- * that satisfies the threshold - staying as close to the original as possible.
+ * Adjust the FOREGROUND: find the color closest to `fg` that reaches `target`
+ * contrast against a fixed `bg`. Deterministic. Use this for plain text.
  */
 export function fixContrast(fgInput: string, bgInput: string, target: number = AA_NORMAL): ContrastFix {
   const fg = parseColor(fgInput);
   const bg = parseColor(bgInput);
-
   const originalRatio = round2(contrastRatio(fg, bg));
+
   if (originalRatio >= target) {
-    return {
-      originalRatio,
-      compliantFg: toHex(fg),
-      newRatio: originalRatio,
-      passesAA: true,
-      alreadyCompliant: true,
-    };
+    return { originalRatio, compliantFg: toHex(fg), newRatio: originalRatio, passesAA: true, alreadyCompliant: true };
   }
 
-  // We can push fg toward black or toward white. We try BOTH directions and,
-  // for each, binary-search the smallest shift that meets the target - staying
-  // as close to the original fg as possible. Then we keep the closer compliant
-  // result (or, if neither meets the target, the one with the best ratio).
-  const black: Rgb = { r: 0, g: 0, b: 0 };
-  const white: Rgb = { r: 255, g: 255, b: 255 };
-
-  const towardsBlack = searchToward(fg, black, bg, target);
-  const towardsWhite = searchToward(fg, white, bg, target);
-
-  const candidate = pickBest(fg, bg, towardsBlack, towardsWhite, target);
+  const candidate = closestCompliant(fg, bg, target);
   const newRatio = round2(contrastRatio(candidate, bg));
-
   return {
     originalRatio,
     compliantFg: toHex(candidate),
@@ -128,6 +109,59 @@ export function fixContrast(fgInput: string, bgInput: string, target: number = A
     passesAA: newRatio >= target,
     alreadyCompliant: false,
   };
+}
+
+export interface BackgroundContrastFix {
+  originalRatio: number;
+  /** Closest compliant background color as "#rrggbb". */
+  compliantBg: string;
+  newRatio: number;
+  passesAA: boolean;
+  alreadyCompliant: boolean;
+}
+
+/**
+ * Adjust the BACKGROUND instead: find the color closest to `bg` that reaches
+ * `target` contrast against a fixed `fg`. Use this to preserve a foreground
+ * that carries the visual identity (e.g. white button text), darkening or
+ * lightening the surface instead of recoloring the text.
+ */
+export function fixContrastByBackground(
+  fgInput: string,
+  bgInput: string,
+  target: number = AA_NORMAL,
+): BackgroundContrastFix {
+  const fg = parseColor(fgInput);
+  const bg = parseColor(bgInput);
+  const originalRatio = round2(contrastRatio(fg, bg));
+
+  if (originalRatio >= target) {
+    return { originalRatio, compliantBg: toHex(bg), newRatio: originalRatio, passesAA: true, alreadyCompliant: true };
+  }
+
+  const candidate = closestCompliant(bg, fg, target);
+  const newRatio = round2(contrastRatio(fg, candidate));
+  return {
+    originalRatio,
+    compliantBg: toHex(candidate),
+    newRatio,
+    passesAA: newRatio >= target,
+    alreadyCompliant: false,
+  };
+}
+
+/**
+ * Find the color closest to `adjustable` that reaches `target` contrast against
+ * the fixed `other` color. Tries pushing toward black and toward white, keeps
+ * the closer compliant result (or best-effort if neither direction can satisfy
+ * the target because `other` itself is the constraint).
+ */
+function closestCompliant(adjustable: Rgb, other: Rgb, target: number): Rgb {
+  const black: Rgb = { r: 0, g: 0, b: 0 };
+  const white: Rgb = { r: 255, g: 255, b: 255 };
+  const towardsBlack = searchToward(adjustable, black, other, target);
+  const towardsWhite = searchToward(adjustable, white, other, target);
+  return pickBest(adjustable, other, towardsBlack, towardsWhite, target);
 }
 
 /**

@@ -20,12 +20,44 @@ test("simpleFixes adds lang, title and labels deterministically", () => {
   assert.ok(rules.includes("document-title"));
   assert.ok(rules.includes("label"));
   assert.match(html, /<html lang="en">/);
-  assert.match(html, /<title>/);
+  // Title is derived from the <h1>, not a generic placeholder.
+  assert.match(html, /<title>Acme Widgets<\/title>/);
   assert.match(html, /aria-label="Email"/);
 
   // Idempotent: re-running finds nothing left to fix.
   const second = simpleFixes({ html });
   assert.equal(second.fixes.length, 0);
+});
+
+test("document-title falls back to a placeholder when there is no <h1>", () => {
+  const html = "<html><head></head><body><p>no heading</p></body></html>";
+  const { html: out } = simpleFixes({ html });
+  assert.match(out, /<title>Untitled page<\/title>/);
+});
+
+test("contrast fix preserves a colored button by adjusting its background", () => {
+  // .cta: white text on a colored surface -> keep the text, darken the surface.
+  const html =
+    '<html><body><style>.cta{color:#ffffff;background-color:#6cb2eb}</style>' +
+    '<button class="cta">Go</button></body></html>';
+  const r = reinjectContrastFixes(html, [{ target: ["button"], fg: "#ffffff", bg: "#6cb2eb" }]);
+  const fix = r.applied[0];
+  assert.equal(fix.property, "background-color");
+  assert.match(r.html, /color:#ffffff/); // text stays white
+  assert.doesNotMatch(r.html, /color:#404040/); // not the old text-darkening behavior
+  assert.ok(fix.ratioAfter >= 4.5);
+});
+
+test("contrast fix recolors text on a white/neutral background", () => {
+  // .muted: gray text on a white page surface -> recolor the text, not the bg.
+  const html =
+    '<html><body><style>.muted{color:#999999;background-color:#ffffff}</style>' +
+    '<p class="muted">hi</p></body></html>';
+  const r = reinjectContrastFixes(html, [{ target: [".muted"], fg: "#999999", bg: "#ffffff" }]);
+  const fix = r.applied[0];
+  assert.equal(fix.property, "color");
+  assert.match(r.html, /background-color:#ffffff/); // page stays white
+  assert.ok(fix.ratioAfter >= 4.5);
 });
 
 test("injectAltText targets the real <img>, not one mentioned in a comment", () => {
