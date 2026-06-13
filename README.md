@@ -37,7 +37,7 @@ Each tool's logic is isolated and testable off-MCP, with no shared state between
 
 ## Stack
 
-TypeScript end-to-end, ESM, Node 20+. MCP TypeScript SDK 1.x, Playwright + axe-core, Octokit, Anthropic SDK, Zod v3.
+TypeScript end-to-end, ESM, Node 22+. MCP TypeScript SDK 1.x, Playwright + axe-core, Octokit, Anthropic SDK, Zod v3.
 
 ## Quick start
 

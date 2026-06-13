@@ -26,7 +26,7 @@ These are non-negotiable. A change that breaks one of them is wrong.
 
 ## Stack and style
 
-- TypeScript ESM, Node 20+. `"type": "module"`. tsconfig is NodeNext, strict.
+- TypeScript ESM, Node 22+. `"type": "module"`. tsconfig is NodeNext, strict.
 - Imports between source files use `.js` extensions (NodeNext resolution), even though the files are `.ts`.
 - Zod v3 for tool input schemas. `registerTool` takes a raw shape (`{ url: z.string() }`), not a `z.object`.
 - Match the surrounding code: comment density, naming, idiom.
@@ -44,7 +44,7 @@ Library APIs move. Before coding against a dependency, confirm the real shape in
 ```bash
 pnpm dev         # run the MCP server (stdio)
 pnpm inspect     # MCP Inspector against the server
-pnpm test        # node:test via tsx (avoids relying on native strip-types; engine stays Node 20+)
+pnpm test        # node:test via tsx (avoids relying on native strip-types; engine stays Node 22+)
 pnpm typecheck   # tsc --noEmit on src, then on test
 pnpm build       # tsc to dist/
 ```

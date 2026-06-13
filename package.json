@@ -22,7 +22,7 @@
     "prepack": "pnpm build"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "keywords": [
     "mcp",
