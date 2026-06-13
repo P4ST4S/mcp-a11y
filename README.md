@@ -67,6 +67,26 @@ pnpm exec tsx src/runner/demo.ts demo-site/index.html --report a11y-report.html
 # add --pr  to open a PR on A11Y_TARGET_REPO (needs GITHUB_TOKEN)
 ```
 
+For the coherent loop, remediate the file that actually lives in the target repo and re-PR the same path:
+
+```bash
+pnpm exec tsx src/runner/demo.ts --from-repo index.html --alt --pr
+```
+
+`--from-repo <path>` fetches that file from `A11Y_TARGET_REPO`, audits and fixes it, then opens a PR editing the same path (no demo gap: you fix the exact file the repo serves). Scratch files are written to the OS temp dir and removed on exit; only the report stays in the working directory.
+
+Runner options:
+
+| Flag | Effect |
+| --- | --- |
+| `<htmlFile>` | Local HTML source (default `demo-site/index.html`). Ignored with `--from-repo`. |
+| `--from-repo <path>` | Fetch and remediate this path from `A11Y_TARGET_REPO`, then re-PR the same path. |
+| `--alt` | Also run `generate_alt_text` on each unlabeled image (needs `ANTHROPIC_API_KEY`). |
+| `--img-selector <sel>` | CSS selector for the image to describe (default: images flagged by the audit). |
+| `--pr` | Open a PR on `A11Y_TARGET_REPO` (needs `GITHUB_TOKEN`). Off by default. |
+| `--repo-path <path>` | Path of the file inside the target repo (defaults to `--from-repo`, else `demo-site/index.html`). |
+| `--report <file>` | Where to write the HTML report (default `a11y-report.html`). |
+
 ## Configuration
 
 Copy `.env.example` to `.env`:
@@ -101,7 +121,7 @@ Then ask Claude to audit a URL, fix the issues, and open a PR.
 
 `demo-site/index.html` is an intentionally broken page (images without alt, poor contrast, no `lang`, form without labels). It is 100% static with zero JavaScript, so the rendered DOM equals the source file, and all colors live in a single `<style>` block. That invariant is what makes deterministic reinjection of fixes into the source reliable.
 
-For a coherent audit-to-PR loop, that page is meant to live inside `A11Y_TARGET_REPO` (served via GitHub Pages or the raw file URL): you audit the file that is in the repo, fix it, and re-PR it.
+For a coherent audit-to-PR loop, run the runner with `--from-repo <path>`: it fetches that file from `A11Y_TARGET_REPO`, audits and fixes it, and re-PRs the same path. Relative image URLs are resolved over the raw repo URL so alt text works on a locally audited copy. You fix the exact file the repo serves, with no demo gap.
 
 ## Guardrail
 
