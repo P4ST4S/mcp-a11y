@@ -153,6 +153,6 @@ test("buildPrBody renders the summary table, fixes, ratios and visual warning", 
   assert.match(body, /`\.hero` → "A sun in a green sky"/);
   assert.match(body, /Visual change to review:/);
   assert.match(body, /<details>/);
-  // No long dashes anywhere.
-  assert.doesNotMatch(body, /[–—]/);
+  // No long dashes anywhere (en dash U+2013 / em dash U+2014).
+  assert.doesNotMatch(body, new RegExp("[\\u2013\\u2014]"));
 });
