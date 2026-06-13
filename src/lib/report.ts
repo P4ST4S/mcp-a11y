@@ -297,10 +297,7 @@ export function buildPrBody(input: PrBodyInput): string {
   lines.push("");
   lines.push("---");
   lines.push(
-    '<sub>Opened by <a href="https://github.com/P4ST4S/mcp-a11y">mcp-a11y</a> -',
-  );
-  lines.push(
-    "the USB-C port of accessibility. These are automated changes; review before merging.</sub>",
+    '<sub>Opened by <a href="https://github.com/P4ST4S/mcp-a11y">mcp-a11y</a> - the USB-C port of accessibility. These are automated changes; review before merging.</sub>',
   );
 
   return lines.join("\n");
