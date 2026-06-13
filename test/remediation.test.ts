@@ -48,6 +48,19 @@ test("contrast fix preserves a colored button by adjusting its background", () =
   assert.ok(fix.ratioAfter >= 4.5);
 });
 
+test("contrast fix handles the `background:` shorthand, not just background-color", () => {
+  // Regression: the shorthand was detected as a surface but never rewritten.
+  const html =
+    '<html><body><style>.cta{color:#ffffff;background:#6cb2eb url(x.png) no-repeat}</style>' +
+    '<button class="cta">Go</button></body></html>';
+  const r = reinjectContrastFixes(html, [{ target: ["button"], fg: "#ffffff", bg: "#6cb2eb" }]);
+  assert.equal(r.applied.length, 1);
+  assert.equal(r.applied[0].property, "background-color");
+  assert.doesNotMatch(r.html, /#6cb2eb/); // old color gone
+  assert.match(r.html, /url\(x\.png\) no-repeat/); // other layers preserved
+  assert.match(r.html, /color:#ffffff/); // text stays white
+});
+
 test("contrast fix recolors text on a white/neutral background", () => {
   // .muted: gray text on a white page surface -> recolor the text, not the bg.
   const html =

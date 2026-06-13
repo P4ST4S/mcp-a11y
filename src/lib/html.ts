@@ -179,15 +179,18 @@ export function reinjectContrastFixes(
     const ownsBackground =
       ruleKeys.some((k) => ruleHasBackground(css, k)) && isColoredSurface(req.bg);
 
-    let done = false;
-    for (const key of ruleKeys) {
-      if (ownsBackground) {
-        const fix = fixContrastByBackground(req.fg, req.bg);
-        if (fix.alreadyCompliant) {
-          done = true;
-          break;
-        }
-        const updated = replaceDeclInRule(css, key, "background-color", fix.compliantBg);
+    // Preferred strategy: adjust the background for colored surfaces, else the
+    // text. If the preferred edit cannot be applied to any rule (e.g. the color
+    // lives in a form we don't rewrite), fall back to the other property so the
+    // violation is still fixed rather than silently skipped.
+    const tryBackground = (): boolean => {
+      const fix = fixContrastByBackground(req.fg, req.bg);
+      if (fix.alreadyCompliant) return true;
+      for (const key of ruleKeys) {
+        // A shared rule may already carry the target value (fixed via an
+        // earlier node). That is success, not a reason to fall back.
+        if (ruleHasDecl(css, key, "background-color", fix.compliantBg)) return true;
+        const updated = replaceBackgroundColor(css, key, fix.compliantBg);
         if (updated !== css) {
           css = updated;
           applied.push({
@@ -200,15 +203,19 @@ export function reinjectContrastFixes(
             ratioAfter: fix.newRatio,
             visualChange: isPerceptibleChange(req.bg, fix.compliantBg),
           });
-          done = true;
-          break;
+          return true;
         }
-      } else {
-        const fix = computeContrastFix(req.fg, req.bg);
-        if (fix.alreadyCompliant) {
-          done = true;
-          break;
-        }
+      }
+      return false;
+    };
+
+    const tryText = (): boolean => {
+      const fix = computeContrastFix(req.fg, req.bg);
+      if (fix.alreadyCompliant) return true;
+      for (const key of ruleKeys) {
+        // A shared rule may already carry the target color (fixed via an
+        // earlier node). That is success, not a reason to fall back.
+        if (ruleHasDecl(css, key, "color", fix.compliantFg)) return true;
         const updated = replaceDeclInRule(css, key, "color", fix.compliantFg);
         if (updated !== css) {
           css = updated;
@@ -222,12 +229,17 @@ export function reinjectContrastFixes(
             ratioAfter: fix.newRatio,
             visualChange: isPerceptibleChange(req.fg, fix.compliantFg),
           });
-          done = true;
-          break;
+          return true;
         }
       }
+      return false;
+    };
+
+    if (ownsBackground) {
+      if (!tryBackground()) tryText();
+    } else {
+      if (!tryText()) tryBackground();
     }
-    void done;
   }
 
   styleEl.set_content(css);
@@ -300,6 +312,50 @@ function replaceDeclInRule(
     const newBody = body.replace(declRe, `$1${prop}: ${toColor}`);
     return `${selectors}{${newBody}}`;
   });
+}
+
+/**
+ * Set the background color of `ruleKey`'s rule, handling both the
+ * `background-color:` longhand and the `background:` shorthand. For the
+ * shorthand we replace only the color token (hex or rgb()) inside the value, so
+ * other layers (url, position, repeat) are preserved. Returns css unchanged if
+ * no background declaration is found.
+ */
+function replaceBackgroundColor(css: string, ruleKey: string, toColor: string): string {
+  // Longhand first.
+  const longhand = replaceDeclInRule(css, ruleKey, "background-color", toColor);
+  if (longhand !== css) return longhand;
+
+  // Shorthand: rewrite the color token within `background: ...`.
+  const ruleRe = new RegExp(`([^{}]*${escapeRegExp(ruleKey)}[^{}]*)\\{([^}]*)\\}`, "g");
+  const colorToken = /(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\))/;
+  return css.replace(ruleRe, (whole, selectors: string, body: string) => {
+    if (!selectorListMatches(selectors, ruleKey)) return whole;
+    const newBody = body.replace(/(^|[;{\s])background\s*:\s*([^;}]+)/, (decl, sep, value) => {
+      if (!colorToken.test(value)) return decl; // no color token to swap
+      return `${sep}background: ${value.replace(colorToken, toColor)}`;
+    });
+    return newBody === body ? whole : `${selectors}{${newBody}}`;
+  });
+}
+
+/** Whether `ruleKey`'s rule already declares `prop: value` (case-insensitive). */
+function ruleHasDecl(
+  css: string,
+  ruleKey: string,
+  prop: "color" | "background-color",
+  value: string,
+): boolean {
+  const ruleRe = new RegExp(`([^{}]*${escapeRegExp(ruleKey)}[^{}]*)\\{([^}]*)\\}`, "g");
+  const declRe =
+    prop === "color"
+      ? new RegExp(`(^|[;{\\s])color\\s*:\\s*${escapeRegExp(value)}\\b`, "i")
+      : new RegExp(`(^|[;{\\s])background(-color)?\\s*:[^;}]*${escapeRegExp(value)}\\b`, "i");
+  let m: RegExpExecArray | null;
+  while ((m = ruleRe.exec(css)) !== null) {
+    if (selectorListMatches(m[1], ruleKey) && declRe.test(m[2])) return true;
+  }
+  return false;
 }
 
 /** Ensure ruleKey is a whole selector token (avoid `.cta` matching `.cta-large`). */
