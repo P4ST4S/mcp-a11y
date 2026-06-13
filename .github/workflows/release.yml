@@ -14,10 +14,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No version here: it is taken from package.json "packageManager".
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10.20.0
 
       - name: Setup Node
         uses: actions/setup-node@v4
